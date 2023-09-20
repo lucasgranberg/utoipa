@@ -394,7 +394,7 @@ pub trait ToSchema<'__s> {
     ///
     /// Typically there is no need to manually implement this method but it is instead implemented
     /// by derive [`macro@ToSchema`] when `#[aliases(...)]` attribute is defined.
-    fn aliases() -> Vec<(&'__s str, openapi::schema::Schema)> {
+    fn aliases() -> std::vec::Vec<(&'__s str, openapi::schema::Schema)> {
         Vec::new()
     }
 }

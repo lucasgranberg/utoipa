@@ -74,7 +74,6 @@ impl<'a> Schema<'a> {
         }
     }
 }
-
 impl ToTokens for Schema<'_> {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let ident = self.ident;
@@ -114,7 +113,7 @@ impl ToTokens for Schema<'_> {
                 .collect::<Array<TokenStream>>();
 
             quote! {
-                fn aliases() -> Vec<(& #life str, utoipa::openapi::schema::Schema)> {
+                fn aliases() -> std::vec::Vec<(& #life str, utoipa::openapi::schema::Schema)> {
                     #alias_schemas.to_vec()
                 }
             }
