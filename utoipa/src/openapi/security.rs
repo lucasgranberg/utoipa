@@ -376,6 +376,10 @@ pub struct OpenIdConnect {
     /// Description of [`OpenIdConnect`] [`SecurityScheme`] supporting markdown syntax.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+
+    /// Optional extensions "x-something".
+    #[serde(skip_serializing_if = "Option::is_none", flatten)]
+    pub extensions: Option<HashMap<String, serde_json::Value>>,
 }
 
 impl OpenIdConnect {
@@ -391,6 +395,7 @@ impl OpenIdConnect {
         Self {
             open_id_connect_url: open_id_connect_url.into(),
             description: None,
+            extensions: None,
         }
     }
 
@@ -407,6 +412,7 @@ impl OpenIdConnect {
         Self {
             open_id_connect_url: open_id_connect_url.into(),
             description: Some(description.into()),
+            extensions: None,
         }
     }
 }
