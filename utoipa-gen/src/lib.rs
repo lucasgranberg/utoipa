@@ -133,6 +133,30 @@ use self::{
 /// _`rename`_ attribute. It behaves similarly to serde's _`rename`_ attribute. If both _serde_
 /// _`rename`_ and _schema_ _`rename`_ are defined __serde__ will take precedence.
 ///
+/// ## Enum Unnamed Variant Field Configuration Options
+///
+/// * `inline` If the type of this field implements [`ToSchema`][to_schema], then the schema definition
+///   will be inlined. **warning:** Don't use this for recursive data types!
+///
+///   _**Inline unnamed field variant schemas.**_
+///   ```rust
+///   # use utoipa::ToSchema;
+///   # #[derive(ToSchema)]
+///   # enum Number {
+///   #     One,
+///   # }
+///   #
+///   # #[derive(ToSchema)]
+///   # enum Color {
+///   #     Spade,
+///   # }
+///    #[derive(ToSchema)]
+///    enum Card {
+///        Number(#[schema(inline)] Number),
+///        Color(#[schema(inline)] Color),
+///    }
+///   ```
+///
 /// # Unnamed Field Struct Optional Configuration Options for `#[schema(...)]`
 /// * `description = ...` Can be literal string or Rust expression e.g. _`const`_ reference or
 ///   `include_str!(...)` statement. This can be used to override **default** description what is
@@ -604,7 +628,7 @@ use self::{
 /// # use utoipa::openapi::schema::{Object, ObjectBuilder};
 /// fn custom_type() -> Object {
 ///     ObjectBuilder::new()
-///         .schema_type(utoipa::openapi::SchemaType::String)
+///         .schema_type(utoipa::openapi::schema::Type::String)
 ///         .format(Some(utoipa::openapi::SchemaFormat::Custom(
 ///             "email".to_string(),
 ///         )))
@@ -2011,7 +2035,7 @@ pub fn openapi(input: TokenStream) -> TokenStream {
 /// # use utoipa::openapi::schema::{Object, ObjectBuilder};
 /// fn custom_type() -> Object {
 ///     ObjectBuilder::new()
-///         .schema_type(utoipa::openapi::SchemaType::String)
+///         .schema_type(utoipa::openapi::schema::Type::String)
 ///         .format(Some(utoipa::openapi::SchemaFormat::Custom(
 ///             "email".to_string(),
 ///         )))
@@ -2487,7 +2511,7 @@ pub fn into_responses(input: TokenStream) -> TokenStream {
 /// _**Create vec of pets schema.**_
 /// ```rust
 /// # use utoipa::openapi::schema::{Schema, Array, Object, ObjectBuilder, SchemaFormat,
-/// # KnownFormat, SchemaType};
+/// # KnownFormat, Type};
 /// # use utoipa::openapi::RefOr;
 /// #[derive(utoipa::ToSchema)]
 /// struct Pet {
@@ -2501,11 +2525,11 @@ pub fn into_responses(input: TokenStream) -> TokenStream {
 ///     Array::new(
 ///         ObjectBuilder::new()
 ///             .property("id", ObjectBuilder::new()
-///                 .schema_type(SchemaType::Integer)
+///                 .schema_type(Type::Integer)
 ///                 .format(Some(SchemaFormat::KnownFormat(KnownFormat::Int32)))
 ///                 .build())
 ///             .required("id")
-///             .property("name", Object::with_type(SchemaType::String))
+///             .property("name", Object::with_type(Type::String))
 ///             .required("name")
 ///     )
 /// ));
@@ -2753,15 +2777,9 @@ impl AnyValue {
 
     fn parse_any(input: ParseStream) -> syn::Result<Self> {
         if input.peek(Lit) {
-            if input.peek(LitStr) {
-                let lit_str = input.parse::<LitStr>().unwrap().to_token_stream();
+            let lit = input.parse::<Lit>().unwrap().to_token_stream();
 
-                Ok(AnyValue::Json(lit_str))
-            } else {
-                let lit = input.parse::<Lit>().unwrap().to_token_stream();
-
-                Ok(AnyValue::Json(lit))
-            }
+            Ok(AnyValue::Json(lit))
         } else {
             let fork = input.fork();
             let is_json = if fork.peek(syn::Ident) && fork.peek2(Token![!]) {

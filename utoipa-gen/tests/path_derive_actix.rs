@@ -358,7 +358,7 @@ fn path_with_struct_variables_with_into_params() {
                 ParameterBuilder::new()
                     .name("name")
                     .schema(Some(
-                        ObjectBuilder::new().schema_type(utoipa::openapi::SchemaType::String),
+                        ObjectBuilder::new().schema_type(utoipa::openapi::schema::Type::String),
                     ))
                     .parameter_in(ParameterIn::Path)
                     .build(),
@@ -366,7 +366,7 @@ fn path_with_struct_variables_with_into_params() {
                     .name("id")
                     .schema(Some(
                         ObjectBuilder::new()
-                            .schema_type(utoipa::openapi::SchemaType::Integer)
+                            .schema_type(utoipa::openapi::schema::Type::Integer)
                             .format(Some(SchemaFormat::KnownFormat(KnownFormat::Int64))),
                     ))
                     .parameter_in(ParameterIn::Path)
@@ -388,7 +388,7 @@ fn path_with_struct_variables_with_into_params() {
             vec![ParameterBuilder::new()
                 .name("age")
                 .schema(Some(Array::new(
-                    ObjectBuilder::new().schema_type(utoipa::openapi::SchemaType::String),
+                    ObjectBuilder::new().schema_type(utoipa::openapi::schema::Type::String),
                 )))
                 .parameter_in(ParameterIn::Query)
                 .build()]
@@ -510,7 +510,7 @@ fn derive_path_with_struct_variables_with_into_params() {
         "[2].description" = r#""Age filter for user""#, "Parameter description"
         "[2].required" = r#"false"#, "Parameter required"
         "[2].deprecated" = r#"true"#, "Parameter deprecated"
-        "[2].schema.type" = r#""array""#, "Parameter schema type"
+        "[2].schema.type" = r#"["array","null"]"#, "Parameter schema type"
         "[2].schema.items.type" = r#""string""#, "Parameter items schema type"
     }
 }
@@ -712,7 +712,7 @@ fn derive_into_params_with_custom_attributes() {
         "[2].example" = r#"["10"]"#, "Parameter example"
         "[2].allowReserved" = r#"true"#, "Parameter allowReserved"
         "[2].explode" = r#"true"#, "Parameter explode"
-        "[2].schema.type" = r#""array""#, "Parameter schema type"
+        "[2].schema.type" = r#"["array","null"]"#, "Parameter schema type"
         "[2].schema.items.type" = r#""string""#, "Parameter items schema type"
 
         "[3].in" = r#""query""#, "Parameter in"
@@ -734,6 +734,7 @@ fn derive_into_params_in_another_module() {
 
         #[derive(Deserialize, IntoParams)]
         pub struct FooParams {
+            #[allow(unused)]
             pub id: String,
         }
     }
@@ -1038,6 +1039,56 @@ macro_rules! test_derive_path_operations {
         }
         )*
     };
+}
+
+#[test]
+fn path_derive_custom_generic_wrapper() {
+    #[derive(utoipa::ToSchema, serde::Serialize, serde::Deserialize)]
+    struct Validated<T>(T);
+
+    impl<T> FromRequest for Validated<T> {
+        type Error = actix_web::Error;
+
+        type Future = Ready<Result<Self, Self::Error>>;
+
+        fn from_request(
+            _req: &actix_web::HttpRequest,
+            _payload: &mut actix_web::dev::Payload,
+        ) -> Self::Future {
+            todo!()
+        }
+    }
+
+    #[derive(utoipa::ToSchema, serde::Serialize, serde::Deserialize)]
+    struct Item(String);
+
+    #[utoipa::path()]
+    #[post("/item")]
+    async fn post_item(_body: Validated<Json<Item>>) -> Json<Item> {
+        Json(Item(String::new()))
+    }
+
+    #[derive(utoipa::OpenApi)]
+    #[openapi(paths(post_item))]
+    struct Doc;
+
+    let doc = serde_json::to_value(Doc::openapi()).unwrap();
+    let operation = doc.pointer("/paths/~1item/post").unwrap();
+
+    assert_json_eq!(
+        &operation.pointer("/requestBody"),
+        json!({
+            "description": "",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "$ref": "#/components/schemas/Item"
+                    }
+                }
+            },
+            "required": true,
+        })
+    )
 }
 
 test_derive_path_operations! {

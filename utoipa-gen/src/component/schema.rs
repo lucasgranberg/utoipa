@@ -83,7 +83,6 @@ impl ToTokensDiagnostics for Schema<'_> {
             self.data,
             self.attributes,
             ident,
-            self.generics,
             None::<Vec<(TypeTree, &TypeTree)>>,
         )?;
 
@@ -107,7 +106,6 @@ impl ToTokensDiagnostics for Schema<'_> {
                         self.data,
                         self.attributes,
                         ident,
-                        self.generics,
                         alias_type_tree?
                             .children
                             .map(|children| children.into_iter().zip(schema_children)),
@@ -198,7 +196,6 @@ impl<'a> SchemaVariant<'a> {
         data: &'a Data,
         attributes: &'a [Attribute],
         ident: &'a Ident,
-        generics: &'a Generics,
         aliases: Option<I>,
     ) -> Result<SchemaVariant<'a>, Diagnostics> {
         match data {
@@ -237,7 +234,6 @@ impl<'a> SchemaVariant<'a> {
                         rename_all: named_features.pop_rename_all_feature(),
                         features: named_features,
                         fields: named,
-                        generics: Some(generics),
                         schema_as,
                         aliases: aliases.map(|aliases| aliases.into_iter().collect()),
                     }))
@@ -299,7 +295,6 @@ pub struct NamedStructSchema<'a> {
     pub description: Option<Description>,
     pub features: Option<Vec<Feature>>,
     pub rename_all: Option<RenameAll>,
-    pub generics: Option<&'a Generics>,
     pub aliases: Option<Vec<(TypeTree<'a>, &'a TypeTree<'a>)>>,
     pub schema_as: Option<As>,
 }
@@ -482,13 +477,14 @@ impl ToTokensDiagnostics for NamedStructSchema<'_> {
                     object_tokens.extend(quote! {
                         .property(#name, #field_schema)
                     });
+                    let component_required =
+                        !is_option && super::is_required(field_rules, &container_rules);
+                    let required = match (required, component_required) {
+                        (Some(required), _) => required.is_true(),
+                        (None, component_required) => component_required,
+                    };
 
-                    if (!is_option && super::is_required(field_rules, &container_rules))
-                        || required
-                            .as_ref()
-                            .map(super::features::Required::is_true)
-                            .unwrap_or(false)
-                    {
+                    if required {
                         object_tokens.extend(quote! {
                             .required(#name)
                         })
@@ -619,6 +615,14 @@ impl ToTokensDiagnostics for UnnamedStructSchema<'_> {
 
             if fields_len == 1 {
                 if let Some(ref mut features) = unnamed_struct_features {
+                    let inline =
+                        features::parse_schema_features_with(&first_field.attrs, |input| {
+                            Ok(parse_features!(input as super::features::Inline))
+                        })?
+                        .unwrap_or_default();
+
+                    features.extend(inline);
+
                     if pop_feature!(features => Feature::Default(crate::features::Default(None)))
                         .is_some()
                     {
@@ -717,6 +721,7 @@ impl<'e> EnumSchema<'e> {
                             features::parse_schema_features_with(attributes, |input| {
                                 Ok(parse_features!(
                                     input as super::features::Example,
+                                    super::features::Examples,
                                     super::features::Default,
                                     super::features::Title,
                                     As
@@ -1097,7 +1102,6 @@ impl ComplexEnum<'_> {
                         rename_all: named_struct_features.pop_rename_all_feature(),
                         features: Some(named_struct_features),
                         fields: &named_fields.named,
-                        generics: None,
                         aliases: None,
                         schema_as: None,
                     }),
@@ -1199,7 +1203,6 @@ impl ComplexEnum<'_> {
                     rename_all: named_struct_features.pop_rename_all_feature(),
                     features: Some(named_struct_features),
                     fields: &named_fields.named,
-                    generics: None,
                     aliases: None,
                     schema_as: None,
                 }))
@@ -1267,7 +1270,6 @@ impl ComplexEnum<'_> {
                     rename_all: named_struct_features.pop_rename_all_feature(),
                     features: Some(named_struct_features),
                     fields: &named_fields.named,
-                    generics: None,
                     aliases: None,
                     schema_as: None,
                 };
@@ -1337,7 +1339,7 @@ impl ComplexEnum<'_> {
                                 #title
                                 .item(#unnamed_enum_tokens)
                                 .item(utoipa::openapi::schema::ObjectBuilder::new()
-                                    .schema_type(utoipa::openapi::schema::SchemaType::Object)
+                                    .schema_type(utoipa::openapi::schema::Type::Object)
                                     .property(#tag, #variant_name_tokens)
                                     .required(#tag)
                                 )
@@ -1346,7 +1348,7 @@ impl ComplexEnum<'_> {
                         Ok(quote! {
                             #unnamed_enum_tokens
                                 #title
-                                .schema_type(utoipa::openapi::schema::SchemaType::Object)
+                                .schema_type(utoipa::openapi::schema::Type::Object)
                                 .property(#tag, #variant_name_tokens)
                                 .required(#tag)
                         })
@@ -1428,7 +1430,6 @@ impl ComplexEnum<'_> {
                     rename_all: named_struct_features.pop_rename_all_feature(),
                     features: Some(named_struct_features),
                     fields: &named_fields.named,
-                    generics: None,
                     aliases: None,
                     schema_as: None,
                 };
@@ -1445,7 +1446,7 @@ impl ComplexEnum<'_> {
                 Ok(quote! {
                     utoipa::openapi::schema::ObjectBuilder::new()
                         #title
-                        .schema_type(utoipa::openapi::schema::SchemaType::Object)
+                        .schema_type(utoipa::openapi::schema::Type::Object)
                         .property(#tag, #variant_name_tokens)
                         .required(#tag)
                         .property(#content, #named_enum_tokens)
@@ -1490,7 +1491,7 @@ impl ComplexEnum<'_> {
                     Ok(quote! {
                         utoipa::openapi::schema::ObjectBuilder::new()
                             #title
-                            .schema_type(utoipa::openapi::schema::SchemaType::Object)
+                            .schema_type(utoipa::openapi::schema::Type::Object)
                             .property(#tag, #variant_name_tokens)
                             .required(#tag)
                             .property(#content, #unnamed_enum_tokens)

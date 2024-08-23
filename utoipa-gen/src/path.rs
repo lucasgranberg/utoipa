@@ -386,15 +386,15 @@ impl<'p> ToTokensDiagnostics for Path<'p> {
                 let context_path = context_path.to_token_stream();
                 let context_path_tokens = quote! {
                     format!("{}{}",
-                        #context_path.to_string().replace('"', ""),
-                        #path.to_string().replace('"', "")
+                        #context_path.replace('"', ""),
+                        #path.replace('"', "")
                     )
                 };
                 context_path_tokens
             })
             .unwrap_or_else(|| {
                 quote! {
-                    #path.to_string().replace('"', "")
+                    #path.replace('"', "")
                 }
             });
 
@@ -684,8 +684,8 @@ impl PathTypeTree for TypeTree<'_> {
                 .map(|children| {
                     children
                         .iter()
-                        .flat_map(|child| &child.path)
-                        .any(|path| SchemaType(path).is_byte())
+                        .flat_map(|child| child.path.as_ref().zip(Some(child.is_option())))
+                        .any(|(path, nullable)| SchemaType { path, nullable }.is_byte())
                 })
                 .unwrap_or(false)
         {
@@ -693,7 +693,10 @@ impl PathTypeTree for TypeTree<'_> {
         } else if self
             .path
             .as_ref()
-            .map(|path| SchemaType(path.deref()))
+            .map(|path| SchemaType {
+                path: path.deref(),
+                nullable: self.is_option(),
+            })
             .map(|schema_type| schema_type.is_primitive())
             .unwrap_or(false)
         {
