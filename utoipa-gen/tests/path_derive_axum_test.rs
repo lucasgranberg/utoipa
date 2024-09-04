@@ -145,14 +145,15 @@ fn get_todo_with_path_tuple() {
 
 #[test]
 fn get_todo_with_extension() {
+    #[derive(utoipa::ToSchema)]
     struct Todo {
         #[allow(unused)]
         id: i32,
     }
     /// In-memory todo store
     type Store = Mutex<Vec<Todo>>;
-    /// List all Todo items
 
+    /// List all Todo items
     ///
     /// List all Todo items from in-memory storage.
     #[utoipa::path(
@@ -163,7 +164,7 @@ fn get_todo_with_extension() {
         )
     )]
     #[allow(unused)]
-    fn list_todos(Extension(store): Extension<Arc<Store>>) {}
+    async fn list_todos(Extension(store): Extension<Arc<Store>>) {}
 
     #[derive(OpenApi)]
     #[openapi(paths(list_todos))]
@@ -646,7 +647,7 @@ fn derive_path_with_validation_attributes_axum() {
         )
     )]
     #[allow(unused)]
-    fn get_foo(path: Path<String>, query: Query<Params>) {}
+    async fn get_foo(path: Path<String>, query: Query<Params>) {}
 
     #[derive(OpenApi, Default)]
     #[openapi(paths(get_foo))]
@@ -751,4 +752,59 @@ fn derive_path_with_validation_attributes_axum() {
         ]),
         config
     );
+}
+
+#[test]
+fn path_derive_inline_with_tuple() {
+    #[derive(utoipa::ToSchema)]
+    #[allow(unused)]
+    pub enum ResourceType {
+        Type1,
+        Type2,
+    }
+
+    #[utoipa::path(
+        get,
+        path = "/test_2params_separated/{resource_type}/{id}",
+        params(
+            ("resource_type" = inline(ResourceType), Path),
+            ("id" = String, Path)
+        )
+    )]
+    #[allow(unused)]
+    pub async fn inline_tuple(
+        Path((resource_type, id)): axum::extract::Path<(ResourceType, String)>,
+    ) {
+    }
+
+    use utoipa::Path;
+    let value = __path_inline_tuple::operation();
+    let value = serde_json::to_value(value).expect("operation should serialize to json");
+
+    assert_json_eq!(
+        value,
+        json!({
+            "operationId": "inline_tuple",
+            "parameters": [
+                {
+                    "in": "path",
+                    "name": "resource_type",
+                    "required": true,
+                    "schema": {
+                        "enum": ["Type1", "Type2"],
+                        "type": "string"
+                    },
+                },
+                {
+                    "in": "path",
+                    "name": "id",
+                    "required": true,
+                    "schema": {
+                        "type": "string"
+                    },
+                }
+            ],
+            "responses": {}
+        })
+    )
 }

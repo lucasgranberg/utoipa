@@ -98,7 +98,6 @@ test_path_operation! {
     derive_path_head: head
     derive_path_patch: patch
     derive_path_trace: trace
-    derive_path_connect: connect
 }
 
 macro_rules! api_fn_doc_with_params {
@@ -119,7 +118,7 @@ macro_rules! api_fn_doc_with_params {
                 )
             )]
         #[allow(unused)]
-        fn my_operation(params: MyParams) -> String {
+        async fn my_operation(params: MyParams) -> String {
             "".to_string()
         }
 
@@ -233,7 +232,7 @@ fn derive_path_with_extra_attributes_without_nested_module() {
         "description" = r#""This is long description for test operation""#, "Api operation description"
         "operationId" = r#""get_foos_by_id_since""#, "Api operation operation_id"
         "summary" = r#""This is test operation""#, "Api operation summary"
-        "tags.[0]" = r#""crate""#, "Api operation tag"
+        "tags.[0]" = r#"null"#, "Api operation tag"
 
         "parameters.[0].deprecated" = r#"false"#, "Parameter 0 deprecated"
         "parameters.[0].description" = r#""Foo database id""#, "Parameter 0 description"
@@ -1926,8 +1925,8 @@ fn derive_path_with_const_expression_context_path() {
     const FOOBAR: &str = "/api/v1/prefix";
 
     #[utoipa::path(
-        context_path = FOOBAR,
         get,
+        context_path = FOOBAR,
         path = "/items",
         responses(
             (status = 200, description = "success response")
@@ -1952,8 +1951,8 @@ fn derive_path_with_const_expression_reference_context_path() {
     const FOOBAR: &str = "/api/v1/prefix";
 
     #[utoipa::path(
-        context_path = &FOOBAR,
         get,
+        context_path = &FOOBAR,
         path = "/items",
         responses(
             (status = 200, description = "success response")
@@ -2052,7 +2051,7 @@ fn derive_path_with_multiple_tags() {
         ),
     )]
     #[allow(unused)]
-    fn get_items() -> String {
+    async fn get_items() -> String {
         "".to_string()
     }
 
@@ -2072,7 +2071,7 @@ fn derive_path_with_multiple_tags() {
                     "description": "success response",
                 },
             },
-            "tags": ["one", "two","another"]
+            "tags": ["mytag", "one", "two","another"]
         })
     );
 }
@@ -2097,7 +2096,7 @@ split to multiple lines";
         ),
     )]
     #[allow(unused)]
-    fn test_description_summary() -> &'static str {
+    async fn test_description_summary() -> &'static str {
         ""
     }
 
@@ -2118,7 +2117,7 @@ split to multiple lines";
                 },
             },
             "summary": "This is summary override that is\nsplit to multiple lines",
-            "tags": ["crate"]
+            "tags": []
         })
     );
 }
@@ -2135,7 +2134,7 @@ fn derive_path_include_str_description() {
         ),
     )]
     #[allow(unused)]
-    fn test_description_summary() -> &'static str {
+    async fn test_description_summary() -> &'static str {
         ""
     }
 
@@ -2155,7 +2154,232 @@ fn derive_path_include_str_description() {
                     "description": "success response",
                 },
             },
-            "tags": ["crate"]
+            "tags": []
+        })
+    );
+}
+
+#[test]
+fn path_and_nest_with_default_tags_from_path() {
+    mod test_path {
+        #[allow(dead_code)]
+        #[utoipa::path(get, path = "/test")]
+        #[allow(unused)]
+        fn test_path() -> &'static str {
+            ""
+        }
+    }
+
+    mod test_nest {
+        #[derive(utoipa::OpenApi)]
+        #[openapi(paths(test_path_nested))]
+        pub struct NestApi;
+
+        #[allow(dead_code)]
+        #[utoipa::path(get, path = "/test")]
+        #[allow(unused)]
+        fn test_path_nested() -> &'static str {
+            ""
+        }
+    }
+
+    #[derive(utoipa::OpenApi)]
+    #[openapi(
+        paths(test_path::test_path),
+        nest(
+            (path = "/api/nest", api = test_nest::NestApi)
+        )
+    )]
+    struct ApiDoc;
+    let value = serde_json::to_value(ApiDoc::openapi()).expect("should be able to serialize json");
+    let paths = value
+        .pointer("/paths")
+        .expect("should find /paths from the OpenAPI spec");
+
+    assert_json_eq!(
+        &paths,
+        json!({
+            "/api/nest/test": {
+                "get": {
+                    "operationId": "test_path_nested",
+                    "responses": {},
+                    "tags": ["test_nest"]
+                }
+            },
+            "/test": {
+                "get": {
+                    "operationId": "test_path",
+                    "responses": {},
+                    "tags": ["test_path"]
+                }
+            }
+        })
+    );
+}
+
+#[test]
+fn path_and_nest_with_addtional_tags() {
+    mod test_path {
+        #[allow(dead_code)]
+        #[utoipa::path(get, path = "/test", tag = "this_is_tag", tags = ["additional"])]
+        #[allow(unused)]
+        fn test_path() -> &'static str {
+            ""
+        }
+    }
+
+    mod test_nest {
+        #[derive(utoipa::OpenApi)]
+        #[openapi(paths(test_path_nested))]
+        pub struct NestApi;
+
+        #[allow(dead_code)]
+        #[utoipa::path(get, path = "/test", tag = "this_is_tag:nest", tags = ["additional:nest"])]
+        #[allow(unused)]
+        fn test_path_nested() -> &'static str {
+            ""
+        }
+    }
+
+    #[derive(utoipa::OpenApi)]
+    #[openapi(
+        paths(test_path::test_path),
+        nest(
+            (path = "/api/nest", api = test_nest::NestApi)
+        )
+    )]
+    struct ApiDoc;
+    let value = serde_json::to_value(ApiDoc::openapi()).expect("should be able to serialize json");
+    let paths = value
+        .pointer("/paths")
+        .expect("should find /paths from the OpenAPI spec");
+
+    assert_json_eq!(
+        &paths,
+        json!({
+            "/api/nest/test": {
+                "get": {
+                    "operationId": "test_path_nested",
+                    "responses": {},
+                    "tags": ["this_is_tag:nest", "additional:nest"]
+                },
+            },
+            "/test": {
+                "get": {
+                    "operationId": "test_path",
+                    "responses": {},
+                    "tags": ["this_is_tag", "additional"]
+                },
+            }
+        })
+    );
+}
+
+#[test]
+fn path_nest_without_any_tags() {
+    mod test_path {
+        #[allow(dead_code)]
+        #[utoipa::path(get, path = "/test")]
+        #[allow(unused)]
+        pub fn test_path() -> &'static str {
+            ""
+        }
+    }
+
+    mod test_nest {
+        #[derive(utoipa::OpenApi)]
+        #[openapi(paths(test_path_nested))]
+        pub struct NestApi;
+
+        #[allow(dead_code)]
+        #[utoipa::path(get, path = "/test")]
+        #[allow(unused)]
+        fn test_path_nested() -> &'static str {
+            ""
+        }
+    }
+
+    use test_nest::NestApi;
+    use test_path::__path_test_path;
+    #[derive(utoipa::OpenApi)]
+    #[openapi(
+        paths(test_path),
+        nest(
+            (path = "/api/nest", api = NestApi)
+        )
+    )]
+    struct ApiDoc;
+    let value = serde_json::to_value(ApiDoc::openapi()).expect("should be able to serialize json");
+    let paths = value
+        .pointer("/paths")
+        .expect("should find /paths from the OpenAPI spec");
+
+    assert_json_eq!(
+        &paths,
+        json!({
+            "/api/nest/test": {
+                "get": {
+                    "operationId": "test_path_nested",
+                    "responses": {},
+                    "tags": []
+                },
+            },
+            "/test": {
+                "get": {
+                    "operationId": "test_path",
+                    "responses": {},
+                    "tags": []
+                },
+            }
+        })
+    );
+}
+
+#[test]
+fn derive_path_with_multiple_methods() {
+    #[allow(dead_code)]
+    #[utoipa::path(
+        method(head, get),
+        path = "/test-multiple",
+        responses(
+            (status = 200, description = "success response")
+        ),
+    )]
+    #[allow(unused)]
+    async fn test_multiple() -> &'static str {
+        ""
+    }
+    use utoipa::OpenApi;
+    #[derive(OpenApi, Default)]
+    #[openapi(paths(test_multiple))]
+    struct ApiDoc;
+
+    let doc = &serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let paths = doc.pointer("/paths").expect("OpenApi must have paths");
+
+    assert_json_eq!(
+        &paths,
+        json!({
+            "/test-multiple": {
+                "get": {
+                    "operationId": "test_multiple",
+                    "responses": {
+                        "200": {
+                            "description": "success response",
+                        },
+                    },
+                    "tags": []
+                },
+                "head": {
+                    "operationId": "test_multiple",
+                    "responses": {
+                        "200": {
+                            "description": "success response",
+                        },
+                    },
+                    "tags": []
+                }
+            }
         })
     );
 }

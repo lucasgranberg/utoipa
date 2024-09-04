@@ -4,11 +4,21 @@
 //! of the library documentation is available through **utoipa** library itself.
 //! Consider browsing via the **utoipa** crate so all links will work correctly.
 
+#![cfg_attr(doc_cfg, feature(doc_cfg))]
 #![warn(missing_docs)]
 #![warn(rustdoc::broken_intra_doc_links)]
 
 #[cfg(all(feature = "decimal", feature = "decimal_float"))]
 compile_error!("`decimal` and `decimal_float` are mutually exclusive feature flags");
+
+#[cfg(all(
+    feature = "actix_extras",
+    feature = "axum_extras",
+    feature = "rocket_extras"
+))]
+compile_error!(
+    "`actix_extras`, `axum_extras` and `rocket_extras` are mutually exclusive feature flags"
+);
 
 use std::{
     borrow::{Borrow, Cow},
@@ -274,7 +284,7 @@ use self::{
 ///   This attribute requires that a `tag` is present, otherwise serde will trigger a compile-time
 ///   failure.
 /// * `untagged` Supported at the container level. Allows [untagged
-/// enum representation](https://serde.rs/enum-representations.html#untagged).
+///    enum representation](https://serde.rs/enum-representations.html#untagged).
 /// * `default` Supported at the container level and field level according to [serde attributes].
 /// * `deny_unknown_fields` Supported at the container level.
 /// * `flatten` Supported at the field level.
@@ -557,7 +567,8 @@ use self::{
 /// ```rust
 /// # use utoipa::ToSchema;
 /// #  mod custom {
-/// #      struct NewBar;
+/// #      #[derive(utoipa::ToSchema)]
+/// #      pub struct NewBar;
 /// #  }
 /// #
 /// # struct Bar;
@@ -707,8 +718,12 @@ pub fn derive_to_schema(input: TokenStream) -> TokenStream {
 ///
 /// # Path Attributes
 ///
-/// * `operation` _**Must be first parameter!**_ Accepted values are known http operations such as
-///   _`get, post, put, delete, head, options, connect, patch, trace`_.
+/// * `operation` _**Must be first parameter!**_ Accepted values are known HTTP operations such as
+///   _`get, post, put, delete, head, options, patch, trace`_.
+///
+/// * `method(get, head, ...)` Http methods for the operation. This allows defining multiple
+///   HTTP methods at once for single operation. Either _`operation`_ or _`method(...)`_ _**must be
+///   provided.**_
 ///
 /// * `path = "..."` Must be OpenAPI format compatible str with arguments within curly braces. E.g _`{id}`_
 ///
@@ -725,11 +740,11 @@ pub fn derive_to_schema(input: TokenStream) -> TokenStream {
 ///   **context_path** can become handy to alter the path.
 ///
 /// * `tag = "..."` Can be used to group operations. Operations with same tag are grouped together. By default
-///   this is derived from the handler that is given to [`OpenApi`][openapi]. If derive results empty str
-///   then default value _`crate`_ is used instead.
+///   this is derived from the module path of the handler that is given to [`OpenApi`][openapi].
 ///
 /// * `tags = ["tag1", ...]` Can be used to group operations. Operations with same tag are grouped
-///   toghether. Tags attribute can be used to add addtional _tags_ for the operation.
+///   together. Tags attribute can be used to add additional _tags_ for the operation. If both
+///   _`tag`_ and _`tags`_ are provided then they will be combined to a single _`tags`_ array.
 ///
 /// * `request_body = ... | request_body(...)` Defining request body indicates that the request is expecting request body within
 ///   the performed request.
@@ -806,9 +821,9 @@ pub fn derive_to_schema(input: TokenStream) -> TokenStream {
 ///   [primitive Rust types][primitive], `application/octet-stream` for _`[u8]`_ and
 ///   _`application/json`_ for struct and complex enum types.
 ///   Content type can also be slice of **content_type** values if the endpoint support returning multiple
-///  response content types. E.g _`["application/json", "text/xml"]`_ would indicate that endpoint can return both
-///  _`json`_ and _`xml`_ formats. **The order** of the content types define the default example show first in
-///  the Swagger UI. Swagger UI will use the first _`content_type`_ value as a default example.
+///   response content types. E.g _`["application/json", "text/xml"]`_ would indicate that endpoint can return both
+///   _`json`_ and _`xml`_ formats. **The order** of the content types define the default example show first in
+///   the Swagger UI. Swagger UI will use the first _`content_type`_ value as a default example.
 ///
 /// * `headers(...)` Slice of response headers that are returned back to a caller.
 ///
@@ -1141,7 +1156,7 @@ pub fn derive_to_schema(input: TokenStream) -> TokenStream {
 /// 1. It allows users to use tuple style path parameters e.g. _`Path((id, name)): Path<(i32, String)>`_ and resolves
 ///    parameter names and types from it.
 /// 2. It enhances [`IntoParams` derive][into_params_derive] functionality by automatically resolving _`parameter_in`_ from
-///   _`Path<...>`_ or _`Query<...>`_ handler function arguments.
+///     _`Path<...>`_ or _`Query<...>`_ handler function arguments.
 ///
 /// _**Resole path argument types from tuple style handler arguments.**_
 /// ```rust
@@ -1200,6 +1215,7 @@ pub fn derive_to_schema(input: TokenStream) -> TokenStream {
 ///
 /// _**More complete example.**_
 /// ```rust
+/// # #[derive(utoipa::ToSchema)]
 /// # struct Pet {
 /// #    id: u64,
 /// #    name: String,
@@ -1238,6 +1254,7 @@ pub fn derive_to_schema(input: TokenStream) -> TokenStream {
 ///
 /// _**More minimal example with the defaults.**_
 /// ```rust
+/// # #[derive(utoipa::ToSchema)]
 /// # struct Pet {
 /// #    id: u64,
 /// #    name: String,
@@ -1304,10 +1321,16 @@ pub fn derive_to_schema(input: TokenStream) -> TokenStream {
 /// _**Example with multiple return types**_
 /// ```rust
 /// # trait User {}
+/// # #[derive(utoipa::ToSchema)]
 /// # struct User1 {
 /// #   id: String
 /// # }
 /// # impl User for User1 {}
+/// # #[derive(utoipa::ToSchema)]
+/// # struct User2 {
+/// #   id: String
+/// # }
+/// # impl User for User2 {}
 /// #[utoipa::path(
 ///     get,
 ///     path = "/user",
@@ -1326,7 +1349,7 @@ pub fn derive_to_schema(input: TokenStream) -> TokenStream {
 ///
 /// _**Example with multiple examples on single response.**_
 /// ```rust
-/// # #[derive(serde::Serialize, serde::Deserialize)]
+/// # #[derive(serde::Serialize, serde::Deserialize, utoipa::ToSchema)]
 /// # struct User {
 /// #   name: String
 /// # }
@@ -1378,7 +1401,6 @@ pub fn path(attr: TokenStream, item: TokenStream) -> TokenStream {
         Ok(ast_fn) => ast_fn,
         Err(error) => return error.into_compile_error().into_token_stream().into(),
     };
-    let fn_name = &*ast_fn.sig.ident.to_string();
 
     #[cfg(feature = "auto_into_responses")]
     {
@@ -1387,12 +1409,12 @@ pub fn path(attr: TokenStream, item: TokenStream) -> TokenStream {
         };
     }
 
-    let mut resolved_operation = match PathOperations::resolve_operation(&ast_fn) {
+    let mut resolved_methods = match PathOperations::resolve_operation(&ast_fn) {
         Ok(operation) => operation,
         Err(diagnostics) => return diagnostics.into_token_stream().into(),
     };
     let resolved_path = PathOperations::resolve_path(
-        &resolved_operation
+        &resolved_methods
             .as_mut()
             .map(|operation| mem::take(&mut operation.path).to_string())
             .or_else(|| path_attribute.path.as_ref().map(|path| path.to_string())), // cannot use mem take because we need this later
@@ -1413,14 +1435,14 @@ pub fn path(attr: TokenStream, item: TokenStream) -> TokenStream {
     {
         use ext::ArgumentResolver;
         use path::parameter::Parameter;
-        let args = resolved_path.as_mut().map(|path| mem::take(&mut path.args));
-        let body = resolved_operation
+        let path_args = resolved_path.as_mut().map(|path| mem::take(&mut path.args));
+        let body = resolved_methods
             .as_mut()
             .map(|path| mem::take(&mut path.body))
             .unwrap_or_default();
 
         let (arguments, into_params_types, body) =
-            match PathOperations::resolve_arguments(&ast_fn.sig.inputs, args, body) {
+            match PathOperations::resolve_arguments(&ast_fn.sig.inputs, path_args, body) {
                 Ok(args) => args,
                 Err(diagnostics) => return diagnostics.into_token_stream().into(),
             };
@@ -1435,27 +1457,17 @@ pub fn path(attr: TokenStream, item: TokenStream) -> TokenStream {
         path_attribute.update_request_body(body);
     }
 
-    let path = Path::new(path_attribute, fn_name)
-        .path_operation(resolved_operation.map(|operation| operation.path_operation))
-        .path(|| resolved_path.map(|path| path.path))
+    let path = Path::new(path_attribute, &ast_fn.sig.ident)
+        .ext_methods(resolved_methods.map(|operation| operation.methods))
+        .path(resolved_path.map(|path| path.path))
         .doc_comments(CommentAttributes::from_attributes(&ast_fn.attrs).0)
-        .deprecated(ast_fn.attrs.iter().find_map(|attr| {
+        .deprecated(ast_fn.attrs.has_deprecated());
 
-            if !matches!(attr.path().get_ident(), Some(ident) if &*ident.to_string() == "deprecated")
-            {
-                None
-            } else {
-                Some(true)
-            }
-        }));
-
-    let path_tokens = path.to_token_stream();
-
-    quote! {
-        #path_tokens
-        #ast_fn
-    }
-    .into()
+    let handler = path::handler::Handler {
+        path,
+        handler_fn: &ast_fn,
+    };
+    handler.to_token_stream().into()
 }
 
 #[proc_macro_derive(OpenApi, attributes(openapi))]
@@ -1470,25 +1482,23 @@ pub fn path(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// * `components(schemas(...), responses(...))` Takes available _`component`_ configurations. Currently only
 ///    _`schema`_ and _`response`_ components are supported.
 ///    * `schemas(...)` List of [`ToSchema`][to_schema]s in OpenAPI schema.
-///    * `responses(...)` List of types that implement
-/// [`ToResponse`][to_response_trait].
+///    * `responses(...)` List of types that implement [`ToResponse`][to_response_trait].
 /// * `modifiers(...)` List of items implementing [`Modify`][modify] trait for runtime OpenApi modification.
 ///   See the [trait documentation][modify] for more details.
 /// * `security(...)` List of [`SecurityRequirement`][security]s global to all operations.
 ///   See more details in [`#[utoipa::path(...)]`][path] [attribute macro security options][path_security].
-/// * `tags(...)` List of [`Tag`][tags] which must match the tag _**path operation**_. By default
-///   the tag is derived from path given to **handlers** list or if undefined then `crate` is used by default.
-///   Alternatively the tag name can be given to path operation via [`#[utoipa::path(...)]`][path] macro.
-///   Tag can be used to define extra information for the api to produce richer documentation.
+/// * `tags(...)` List of [`Tag`][tags]s which must match the tag _**path operation**_.  Tags can be used to
+///   define extra information for the API to produce richer documentation. See [tags attribute syntax][tags_syntax].
 /// * `external_docs(...)` Can be used to reference external resource to the OpenAPI doc for extended documentation.
 ///   External docs can be in [`OpenApi`][openapi_struct] or in [`Tag`][tags] level.
 /// * `servers(...)` Define [`servers`][servers] as derive argument to the _`OpenApi`_. Servers
-///   are completely optional and thus can be omitted from the declaration.
+///   are completely optional and thus can be omitted from the declaration. See [servers attribute
+///   syntax][servers_syntax]
 /// * `info(...)` Declare [`Info`][info] attribute values used to override the default values
 ///   generated from Cargo environment variables. **Note!** Defined attributes will override the
 ///   whole attribute from generated values of Cargo environment variables. E.g. defining
 ///   `contact(name = ...)` will ultimately override whole contact of info and not just partially
-///   the name.
+///   the name. See [info attribute sytnax][info_syntax]
 /// * `nest(...)` Allows nesting [`OpenApi`][openapi_struct]s to this _`OpenApi`_ instance. Nest
 ///   takes comma separated list of tuples of nested `OpenApi`s. _`OpenApi`_ instance must
 ///   implement [`OpenApi`][openapi] trait. Nesting allows defining one `OpenApi` per defined path.
@@ -1518,6 +1528,16 @@ pub fn path(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// * `license(...)` Used to override the whole license generated from environment variables.
 ///     * `name = ...` License name of the API. It can be a literal string.
 ///     * `url = ...` Define optional URL of the license. It must be URL formatted string.
+///
+/// # `tags(...)` attribute syntax
+///
+/// * `name = ...` Must be provided, can be either of static [`str`], [`String`] or an expression
+///   e.g. reference to static [`const`][const].
+/// * `description = ...` Optional description for the tag. Can be either or static [`str`] or
+///   _`include_str!(...)`_ macro call.
+/// * `external_docs(...)` Optional links to external documents.
+///      * `url = ...` Mandatory URL for external documentation.
+///      * `description = ...` Optional description for the _`url`_ link.
 ///
 /// # `servers(...)` attribute syntax
 ///
@@ -1700,20 +1720,16 @@ pub fn path(attr: TokenStream, item: TokenStream) -> TokenStream {
 /// [tags]: openapi/tag/struct.Tag.html
 /// [to_response_trait]: trait.ToResponse.html
 /// [servers]: openapi/server/index.html
+/// [const]: https://doc.rust-lang.org/std/keyword.const.html
+/// [tags_syntax]: #tags-attribute-syntax
+/// [info_syntax]: #info-attribute-syntax
+/// [servers_syntax]: #servers-attribute-syntax
 pub fn openapi(input: TokenStream) -> TokenStream {
     let DeriveInput { attrs, ident, .. } = syn::parse_macro_input!(input);
 
     parse_openapi_attrs(&attrs)
-        .and_then(|openapi_attr| {
-            openapi_attr.ok_or(
-                syn::Error::new(
-                ident.span(),
-                "expected #[openapi(...)] attribute to be present when used with OpenApi derive trait")
-            )
-        })
-        .map_or_else(syn::Error::into_compile_error, |attrs| {
-            OpenApi(attrs, ident).into_token_stream()
-        })
+        .map(|openapi_attr| OpenApi(openapi_attr, ident).to_token_stream())
+        .map_or_else(syn::Error::into_compile_error, ToTokens::into_token_stream)
         .into()
 }
 
@@ -2182,9 +2198,9 @@ pub fn into_params(input: TokenStream) -> TokenStream {
 ///   [primitive Rust types][primitive], `application/octet-stream` for _`[u8]`_ and
 ///   _`application/json`_ for struct and complex enum types.
 ///   Content type can also be slice of **content_type** values if the endpoint support returning multiple
-///  response content types. E.g _`["application/json", "text/xml"]`_ would indicate that endpoint can return both
-///  _`json`_ and _`xml`_ formats. **The order** of the content types define the default example show first in
-///  the Swagger UI. Swagger UI will use the first _`content_type`_ value as a default example.
+///    response content types. E.g _`["application/json", "text/xml"]`_ would indicate that endpoint can return both
+///    _`json`_ and _`xml`_ formats. **The order** of the content types define the default example show first in
+///    the Swagger UI. Swagger UI will use the first _`content_type`_ value as a default example.
 ///
 /// * `headers(...)` Slice of response headers that are returned back to a caller.
 ///
@@ -2349,9 +2365,9 @@ pub fn to_response(input: TokenStream) -> TokenStream {
 ///   [primitive Rust types][primitive], `application/octet-stream` for _`[u8]`_ and
 ///   _`application/json`_ for struct and complex enum types.
 ///   Content type can also be slice of **content_type** values if the endpoint support returning multiple
-///  response content types. E.g _`["application/json", "text/xml"]`_ would indicate that endpoint can return both
-///  _`json`_ and _`xml`_ formats. **The order** of the content types define the default example show first in
-///  the Swagger UI. Swagger UI will use the first _`content_type`_ value as a default example.
+///    response content types. E.g _`["application/json", "text/xml"]`_ would indicate that endpoint can return both
+///    _`json`_ and _`xml`_ formats. **The order** of the content types define the default example show first in
+///    the Swagger UI. Swagger UI will use the first _`content_type`_ value as a default example.
 ///
 /// * `headers(...)` Slice of response headers that are returned back to a caller.
 ///
@@ -2574,6 +2590,7 @@ pub fn schema(input: TokenStream) -> TokenStream {
         deprecated: None,
         description: None,
         object_name: "",
+        is_generics_type_arg: false, // it cannot be generic struct here
     });
 
     match schema {
@@ -2685,9 +2702,9 @@ impl From<bool> for Required {
     }
 }
 
-impl From<features::Required> for Required {
-    fn from(value: features::Required) -> Self {
-        let features::Required(required) = value;
+impl From<features::attributes::Required> for Required {
+    fn from(value: features::attributes::Required) -> Self {
+        let features::attributes::Required(required) = value;
         crate::Required::from(required)
     }
 }
@@ -2891,6 +2908,19 @@ impl<T> OptionExt<T> for Option<T> {
     }
 }
 
+trait GenericsExt {
+    fn any_match_type_tree(&self, type_tree: &TypeTree) -> bool;
+}
+
+impl<'g> GenericsExt for &'g syn::Generics {
+    fn any_match_type_tree(&self, type_tree: &TypeTree) -> bool {
+        self.params.iter().any(|generic| match generic {
+            syn::GenericParam::Type(generic_type) => type_tree.match_ident(&generic_type.ident),
+            _ => false,
+        })
+    }
+}
+
 trait ToTokensDiagnostics {
     fn to_tokens(&self, tokens: &mut TokenStream2) -> Result<(), Diagnostics>;
 
@@ -2922,6 +2952,170 @@ macro_rules! as_tokens_or_diagnostics {
 }
 
 use as_tokens_or_diagnostics;
+
+#[derive(Debug)]
+struct Diagnostics {
+    diagnostics: Vec<DiangosticsInner>,
+}
+
+#[derive(Debug)]
+struct DiangosticsInner {
+    span: Span,
+    message: Cow<'static, str>,
+    suggestions: Vec<Suggestion>,
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Suggestion {
+    Help(Cow<'static, str>),
+    Note(Cow<'static, str>),
+}
+
+impl Display for Diagnostics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message())
+    }
+}
+
+impl Display for Suggestion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Help(help) => {
+                let s: &str = help.borrow();
+                write!(f, "help = {}", s)
+            }
+            Self::Note(note) => {
+                let s: &str = note.borrow();
+                write!(f, "note = {}", s)
+            }
+        }
+    }
+}
+
+impl Diagnostics {
+    fn message(&self) -> Cow<'static, str> {
+        self.diagnostics
+            .first()
+            .as_ref()
+            .map(|diagnostics| diagnostics.message.clone())
+            .unwrap_or_else(|| Cow::Borrowed(""))
+    }
+
+    pub fn new<S: Into<Cow<'static, str>>>(message: S) -> Self {
+        Self::with_span(Span::call_site(), message)
+    }
+
+    pub fn with_span<S: Into<Cow<'static, str>>>(span: Span, message: S) -> Self {
+        Self {
+            diagnostics: vec![DiangosticsInner {
+                span,
+                message: message.into(),
+                suggestions: Vec::new(),
+            }],
+        }
+    }
+
+    pub fn help<S: Into<Cow<'static, str>>>(mut self, help: S) -> Self {
+        if let Some(diagnostics) = self.diagnostics.first_mut() {
+            diagnostics.suggestions.push(Suggestion::Help(help.into()));
+            diagnostics.suggestions.sort();
+        }
+
+        self
+    }
+
+    pub fn note<S: Into<Cow<'static, str>>>(mut self, note: S) -> Self {
+        if let Some(diagnostics) = self.diagnostics.first_mut() {
+            diagnostics.suggestions.push(Suggestion::Note(note.into()));
+            diagnostics.suggestions.sort();
+        }
+
+        self
+    }
+}
+
+impl From<syn::Error> for Diagnostics {
+    fn from(value: syn::Error) -> Self {
+        Self::with_span(value.span(), value.to_string())
+    }
+}
+
+impl ToTokens for Diagnostics {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        for diagnostics in &self.diagnostics {
+            let span = diagnostics.span;
+            let message: &str = diagnostics.message.borrow();
+
+            let suggestions = diagnostics
+                .suggestions
+                .iter()
+                .map(Suggestion::to_string)
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            let diagnostics = if !suggestions.is_empty() {
+                Cow::Owned(format!("{message}\n\n{suggestions}"))
+            } else {
+                Cow::Borrowed(message)
+            };
+
+            tokens.extend(quote_spanned! {span=>
+                ::core::compile_error!(#diagnostics);
+            })
+        }
+    }
+}
+
+impl Error for Diagnostics {}
+
+impl FromIterator<Diagnostics> for Option<Diagnostics> {
+    fn from_iter<T: IntoIterator<Item = Diagnostics>>(iter: T) -> Self {
+        iter.into_iter().reduce(|mut acc, diagnostics| {
+            acc.diagnostics.extend(diagnostics.diagnostics);
+            acc
+        })
+    }
+}
+
+trait AttributesExt {
+    fn has_deprecated(&self) -> bool;
+}
+
+impl AttributesExt for Vec<syn::Attribute> {
+    fn has_deprecated(&self) -> bool {
+        self.iter().any(|attr| {
+            matches!(attr.path().get_ident(), Some(ident) if &*ident.to_string() == "deprecated")
+        })
+    }
+}
+
+impl<'a> AttributesExt for &'a [syn::Attribute] {
+    fn has_deprecated(&self) -> bool {
+        self.iter().any(|attr| {
+            matches!(attr.path().get_ident(), Some(ident) if &*ident.to_string() == "deprecated")
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn diagnostics_ordering_help_comes_before_note() {
+        let diagnostics = Diagnostics::new("this an error")
+            .note("you could do this to solve the error")
+            .help("try this thing");
+
+        let tokens = diagnostics.into_token_stream();
+
+        let expected_tokens = quote::quote!(::core::compile_error!(
+            "this an error\n\nhelp = try this thing\nnote = you could do this to solve the error"
+        ););
+
+        assert_eq!(tokens.to_string(), expected_tokens.to_string());
+    }
+}
 
 /// Parsing utils
 mod parse_utils {
@@ -3029,6 +3223,14 @@ mod parse_utils {
         })
     }
 
+    pub fn parse_parethesized_terminated<T: Parse, S: Parse>(
+        input: ParseStream,
+    ) -> syn::Result<Punctuated<T, S>> {
+        let group;
+        syn::parenthesized!(group in input);
+        Punctuated::parse_terminated(&group)
+    }
+
     pub fn parse_punctuated_within_parenthesis<T>(
         input: ParseStream,
     ) -> syn::Result<Punctuated<T, Comma>>
@@ -3108,127 +3310,5 @@ mod parse_utils {
                 }
             }
         }
-    }
-}
-
-#[derive(Debug)]
-struct Diagnostics {
-    diagnostics: Vec<DiangosticsInner>,
-}
-
-#[derive(Debug)]
-struct DiangosticsInner {
-    span: Span,
-    message: Cow<'static, str>,
-    suggestions: Vec<Suggestion>,
-}
-
-#[derive(Debug)]
-enum Suggestion {
-    Help(Cow<'static, str>),
-    Note(Cow<'static, str>),
-}
-
-impl Display for Diagnostics {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message())
-    }
-}
-
-impl Display for Suggestion {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Help(help) => {
-                let s: &str = help.borrow();
-                write!(f, "help = {}", s)
-            }
-            Self::Note(note) => {
-                let s: &str = note.borrow();
-                write!(f, "note = {}", s)
-            }
-        }
-    }
-}
-
-impl Diagnostics {
-    fn message(&self) -> Cow<'static, str> {
-        self.diagnostics
-            .first()
-            .as_ref()
-            .map(|diagnostics| diagnostics.message.clone())
-            .unwrap_or_else(|| Cow::Borrowed(""))
-    }
-
-    pub fn new<S: Into<Cow<'static, str>>>(message: S) -> Self {
-        Self::with_span(Span::call_site(), message)
-    }
-
-    pub fn with_span<S: Into<Cow<'static, str>>>(span: Span, message: S) -> Self {
-        Self {
-            diagnostics: vec![DiangosticsInner {
-                span,
-                message: message.into(),
-                suggestions: Vec::new(),
-            }],
-        }
-    }
-
-    pub fn help<S: Into<Cow<'static, str>>>(mut self, help: S) -> Self {
-        if let Some(diagnostics) = self.diagnostics.first_mut() {
-            diagnostics.suggestions.push(Suggestion::Help(help.into()));
-        }
-
-        self
-    }
-
-    pub fn note<S: Into<Cow<'static, str>>>(mut self, note: S) -> Self {
-        if let Some(diagnostics) = self.diagnostics.first_mut() {
-            diagnostics.suggestions.push(Suggestion::Note(note.into()));
-        }
-
-        self
-    }
-}
-
-impl From<syn::Error> for Diagnostics {
-    fn from(value: syn::Error) -> Self {
-        Self::with_span(value.span(), value.to_string())
-    }
-}
-
-impl ToTokens for Diagnostics {
-    fn to_tokens(&self, tokens: &mut TokenStream2) {
-        for diagnostics in &self.diagnostics {
-            let span = diagnostics.span;
-            let message: &str = diagnostics.message.borrow();
-
-            let suggestions = diagnostics
-                .suggestions
-                .iter()
-                .map(Suggestion::to_string)
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            let diagnostics = if !suggestions.is_empty() {
-                Cow::Owned(format!("{message}\n\n{suggestions}"))
-            } else {
-                Cow::Borrowed(message)
-            };
-
-            tokens.extend(quote_spanned! {span=>
-                ::core::compile_error!(#diagnostics);
-            })
-        }
-    }
-}
-
-impl Error for Diagnostics {}
-
-impl FromIterator<Diagnostics> for Option<Diagnostics> {
-    fn from_iter<T: IntoIterator<Item = Diagnostics>>(iter: T) -> Self {
-        iter.into_iter().reduce(|mut acc, diagnostics| {
-            acc.diagnostics.extend(diagnostics.diagnostics);
-            acc
-        })
     }
 }

@@ -4,7 +4,7 @@ use syn::punctuated::Punctuated;
 use syn::token::Comma;
 use syn::{parenthesized, parse::Parse, token::Paren, Error, Token};
 
-use crate::component::features::Inline;
+use crate::component::features::attributes::Inline;
 use crate::component::ComponentSchema;
 use crate::{parse_utils, AnyValue, Array, Diagnostics, Required, ToTokensDiagnostics};
 
@@ -169,6 +169,7 @@ impl ToTokensDiagnostics for RequestBodyAttr<'_> {
                         description: None,
                         deprecated: None,
                         object_name: "",
+                        is_generics_type_arg: false,
                     })?
                     .to_token_stream()
                 }

@@ -142,7 +142,9 @@ impl ComponentsBuilder {
         // are created when the main schema is a generic type which should be included in OpenAPI
         // spec in its generic form.
         if aliases.is_empty() {
-            let (name, schema) = I::schema();
+            let name = I::name();
+            let schema = I::schema();
+            // let (name, schema) = I::schema();
             self.schemas.insert(name.to_string(), schema);
         }
 
@@ -1771,11 +1773,11 @@ pub enum KnownFormat {
     Byte,
     /// binary data (octet).
     Binary,
-    /// ISO-8601 full time format [FRC3339](https://xml2rfc.ietf.org/public/rfc/html/rfc3339.html#anchor14).
+    /// ISO-8601 full time format [RFC3339](https://xml2rfc.ietf.org/public/rfc/html/rfc3339.html#anchor14).
     Time,
-    /// ISO-8601 full date [FRC3339](https://xml2rfc.ietf.org/public/rfc/html/rfc3339.html#anchor14).
+    /// ISO-8601 full date [RFC3339](https://xml2rfc.ietf.org/public/rfc/html/rfc3339.html#anchor14).
     Date,
-    /// ISO-8601 full date time [FRC3339](https://xml2rfc.ietf.org/public/rfc/html/rfc3339.html#anchor14).
+    /// ISO-8601 full date time [RFC3339](https://xml2rfc.ietf.org/public/rfc/html/rfc3339.html#anchor14).
     DateTime,
     /// duration format from [RFC3339 Appendix-A](https://datatracker.ietf.org/doc/html/rfc3339#appendix-A).
     Duration,

@@ -22,7 +22,7 @@ fn derive_openapi_with_security_requirement() {
         ))]
     struct ApiDoc;
 
-    let doc_value = serde_json::to_value(&ApiDoc::openapi()).unwrap();
+    let doc_value = serde_json::to_value(ApiDoc::openapi()).unwrap();
 
     assert_value! {doc_value=>
         "security.[0]" = "{}", "Optional security requirement"
@@ -45,7 +45,7 @@ fn derive_openapi_tags() {
     ))]
     struct ApiDoc;
 
-    let doc = serde_json::to_value(&ApiDoc::openapi()).unwrap();
+    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
 
     assert_value! {doc=>
         "tags.[0].name" = r###""random::api""###, "Tags random_api name"
@@ -66,11 +66,28 @@ fn derive_openapi_tags_include_str() {
     ))]
     struct ApiDoc;
 
-    let doc = serde_json::to_value(&ApiDoc::openapi()).unwrap();
+    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
 
     assert_value! {doc=>
         "tags.[0].name" = r###""random::api""###, "Tags random_api name"
         "tags.[0].description" = r###""this is include description\n""###, "Tags random_api description"
+    }
+}
+
+#[test]
+fn derive_openapi_tags_with_const_name() {
+    const TAG: &str = "random::api";
+    #[derive(OpenApi)]
+    #[openapi(tags(
+        (name = TAG),
+    ))]
+    struct ApiDoc;
+
+    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
+
+    assert_value! {doc=>
+        "tags.[0].name" = r###""random::api""###, "Tags random_api name"
+        "tags.[0].description" = r###"null"###, "Tags random_api description"
     }
 }
 
@@ -83,7 +100,7 @@ fn derive_openapi_with_external_docs() {
     ))]
     struct ApiDoc;
 
-    let doc = serde_json::to_value(&ApiDoc::openapi()).unwrap();
+    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
 
     assert_value! {doc=>
         "externalDocs.url" = r###""http://localhost.more.about.api""###, "External docs url"
@@ -97,7 +114,7 @@ fn derive_openapi_with_external_docs_only_url() {
     #[openapi(external_docs(url = "http://localhost.more.about.api"))]
     struct ApiDoc;
 
-    let doc = serde_json::to_value(&ApiDoc::openapi()).unwrap();
+    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
 
     assert_value! {doc=>
         "externalDocs.url" = r###""http://localhost.more.about.api""###, "External docs url"
@@ -121,7 +138,7 @@ fn derive_openapi_with_components_in_different_module() {
     #[openapi(components(schemas(custom::Todo)))]
     struct ApiDoc;
 
-    let doc = serde_json::to_value(&ApiDoc::openapi()).unwrap();
+    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
     let todo = doc.pointer("/components/schemas/Todo").unwrap();
 
     assert_ne!(
@@ -149,7 +166,7 @@ fn derive_openapi_with_responses() {
     #[openapi(components(responses(MyResponse)))]
     struct ApiDoc;
 
-    let doc = serde_json::to_value(&ApiDoc::openapi()).unwrap();
+    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
     let responses = doc.pointer("/components/responses").unwrap();
 
     assert_json_eq!(
@@ -178,7 +195,7 @@ fn derive_openapi_with_servers() {
     )]
     struct ApiDoc;
 
-    let value = serde_json::to_value(&ApiDoc::openapi()).unwrap();
+    let value = serde_json::to_value(ApiDoc::openapi()).unwrap();
     let servers = value.pointer("/servers");
 
     assert_json_eq!(
@@ -222,7 +239,7 @@ fn derive_openapi_with_custom_info() {
     ))]
     struct ApiDoc;
 
-    let value = serde_json::to_value(&ApiDoc::openapi()).unwrap();
+    let value = serde_json::to_value(ApiDoc::openapi()).unwrap();
     let info = value.pointer("/info");
 
     assert_json_include!(
@@ -254,7 +271,7 @@ fn derive_openapi_with_include_str_description() {
     ))]
     struct ApiDoc;
 
-    let value = serde_json::to_value(&ApiDoc::openapi()).unwrap();
+    let value = serde_json::to_value(ApiDoc::openapi()).unwrap();
     let info = value.pointer("/info");
 
     assert_json_include!(
@@ -438,7 +455,7 @@ fn derive_nest_openapi_with_tags() {
     )]
     struct ApiDoc;
 
-    let api = serde_json::to_value(&ApiDoc::openapi()).expect("should serialize to value");
+    let api = serde_json::to_value(ApiDoc::openapi()).expect("should serialize to value");
     let paths = api.pointer("/paths");
 
     assert_json_eq!(
@@ -448,7 +465,7 @@ fn derive_nest_openapi_with_tags() {
                 "get": {
                     "operationId": "foobar",
                     "responses": {},
-                    "tags": [ "yeah", "wowow", "foobarapi" ]
+                    "tags": [ "mytag", "yeah", "wowow", "foobarapi" ]
                 }
             },
             "/api/v1/foobar/another": {
@@ -469,14 +486,14 @@ fn derive_nest_openapi_with_tags() {
                 "get": {
                     "operationId": "test_path_status",
                     "responses": {},
-                    "tags": [ "crate" ]
+                    "tags": []
                 }
             },
             "/api/v1/user/test": {
                 "get": {
                     "operationId": "user_test_path",
                     "responses": {},
-                    "tags": [ "user", TAG, "user_api" ]
+                    "tags": [ "user", TAG  ]
                 }
             },
             "/random": {

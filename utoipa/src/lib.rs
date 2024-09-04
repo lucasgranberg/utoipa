@@ -42,55 +42,56 @@
 //!
 //! # Crate Features
 //!
-//! * **yaml** Enables **serde_yaml** serialization of OpenAPI objects.
-//! * **actix_extras** Enhances [actix-web](https://github.com/actix/actix-web/) integration with being able to
+//! * **`macros`** Enable `utoipa-gen` macros. **This is enabled by default.**
+//! * **`yaml`** Enables **serde_yaml** serialization of OpenAPI objects.
+//! * **`actix_extras`** Enhances [actix-web](https://github.com/actix/actix-web/) integration with being able to
 //!   parse `path`, `path` and `query` parameters from actix web path attribute macros. See [actix extras support][actix_path] or
 //!   [examples](https://github.com/juhaku/utoipa/tree/master/examples) for more details.
-//! * **rocket_extras** Enhances [rocket](https://github.com/SergioBenitez/Rocket) framework integration with being
+//! * **`rocket_extras`** Enhances [rocket](https://github.com/SergioBenitez/Rocket) framework integration with being
 //!   able to parse `path`, `path` and `query` parameters from rocket path attribute macros. See [rocket extras support][rocket_path]
 //!   or [examples](https://github.com/juhaku/utoipa/tree/master/examples) for more details
-//! * **axum_extras** Enhances [axum](https://github.com/tokio-rs/axum) framework integration allowing users to use `IntoParams`
+//! * **`axum_extras`** Enhances [axum](https://github.com/tokio-rs/axum) framework integration allowing users to use `IntoParams`
 //!   without defining the `parameter_in` attribute. See [axum extras support][axum_path]
 //!   or [examples](https://github.com/juhaku/utoipa/tree/master/examples) for more details.
-//! * **debug** Add extra traits such as debug traits to openapi definitions and elsewhere.
-//! * **chrono** Add support for [chrono](https://crates.io/crates/chrono) `DateTime`, `Date`, `NaiveDate`, `NaiveTime` and `Duration`
+//! * **`debug`** Add extra traits such as debug traits to openapi definitions and elsewhere.
+//! * **`chrono`** Add support for [chrono](https://crates.io/crates/chrono) `DateTime`, `Date`, `NaiveDate`, `NaiveTime` and `Duration`
 //!   types. By default these types are parsed to `string` types with additional `format` information.
 //!   `format: date-time` for `DateTime` and `format: date` for `Date` and `NaiveDate` according
 //!   [RFC3339](https://xml2rfc.ietf.org/public/rfc/html/rfc3339.html#anchor14) as `ISO-8601`. To
 //!   override default `string` representation users have to use `value_type` attribute to override the type.
 //!   See [docs](https://docs.rs/utoipa/latest/utoipa/derive.ToSchema.html) for more details.
-//! * **time** Add support for [time](https://crates.io/crates/time) `OffsetDateTime`, `PrimitiveDateTime`, `Date`, and `Duration` types.
+//! * **`time`** Add support for [time](https://crates.io/crates/time) `OffsetDateTime`, `PrimitiveDateTime`, `Date`, and `Duration` types.
 //!   By default these types are parsed as `string`. `OffsetDateTime` and `PrimitiveDateTime` will use `date-time` format. `Date` will use
 //!   `date` format and `Duration` will not have any format. To override default `string` representation users have to use `value_type` attribute
 //!   to override the type. See [docs](https://docs.rs/utoipa/latest/utoipa/derive.ToSchema.html) for more details.
-//! * **decimal** Add support for [rust_decimal](https://crates.io/crates/rust_decimal) `Decimal` type. **By default**
+//! * **`decimal`** Add support for [rust_decimal](https://crates.io/crates/rust_decimal) `Decimal` type. **By default**
 //!   it is interpreted as `String`. If you wish to change the format you need to override the type.
 //!   See the `value_type` in [`ToSchema` derive docs][to_schema_derive].
-//! * **decimal_float** Add support for [rust_decimal](https://crates.io/crates/rust_decimal) `Decimal` type. **By default**
+//! * **`decimal_float`** Add support for [rust_decimal](https://crates.io/crates/rust_decimal) `Decimal` type. **By default**
 //!   it is interpreted as `Number`. This feature is mutually exclusive with **decimal** and allow to change the default type used in your
 //!   documentation for `Decimal` much like `serde_with_float` feature exposed by rust_decimal.
-//! * **uuid** Add support for [uuid](https://github.com/uuid-rs/uuid). `Uuid` type will be presented as `String` with
+//! * **`uuid`** Add support for [uuid](https://github.com/uuid-rs/uuid). `Uuid` type will be presented as `String` with
 //!   format `uuid` in OpenAPI spec.
-//! * **ulid** Add support for [ulid](https://github.com/dylanhart/ulid-rs). `Ulid` type will be presented as `String` with
+//! * **`ulid`** Add support for [ulid](https://github.com/dylanhart/ulid-rs). `Ulid` type will be presented as `String` with
 //!   format `ulid` in OpenAPI spec.
-//! * **url** Add support for [url](https://github.com/servo/rust-url). `Url` type will be presented as `String` with
+//! * **`url`** Add support for [url](https://github.com/servo/rust-url). `Url` type will be presented as `String` with
 //!   format `uri` in OpenAPI spec.
-//! * **smallvec** Add support for [smallvec](https://crates.io/crates/smallvec). `SmallVec` will be treated as `Vec`.
-//! * **openapi_extensions** Adds convenience functions for documenting common scenarios, such as JSON request bodies and responses.
+//! * **`smallvec`** Add support for [smallvec](https://crates.io/crates/smallvec). `SmallVec` will be treated as `Vec`.
+//! * **`openapi_extensions`** Adds convenience functions for documenting common scenarios, such as JSON request bodies and responses.
 //!   See the [`request_body`](https://docs.rs/utoipa/latest/utoipa/openapi/request_body/index.html) and
 //!   [`response`](https://docs.rs/utoipa/latest/utoipa/openapi/response/index.html) docs for examples.
-//! * **repr** Add support for [repr_serde](https://github.com/dtolnay/serde-repr)'s `repr(u*)` and `repr(i*)` attributes to unit type enums for
+//! * **`repr`** Add support for [repr_serde](https://github.com/dtolnay/serde-repr)'s `repr(u*)` and `repr(i*)` attributes to unit type enums for
 //!   C-like enum representation. See [docs](https://docs.rs/utoipa/latest/utoipa/derive.ToSchema.html) for more details.
-//! * **preserve_order** Preserve order of properties when serializing the schema for a component.
+//! * **`preserve_order`** Preserve order of properties when serializing the schema for a component.
 //!   When enabled, the properties are listed in order of fields in the corresponding struct definition.
 //!   When disabled, the properties are listed in alphabetical order.
-//! * **preserve_path_order** Preserve order of OpenAPI Paths according to order they have been
+//! * **`preserve_path_order`** Preserve order of OpenAPI Paths according to order they have been
 //!   introduced to the `#[openapi(paths(...))]` macro attribute. If disabled the paths will be
 //!   ordered in alphabetical order.
-//! * **indexmap** Add support for [indexmap](https://crates.io/crates/indexmap). When enabled `IndexMap` will be rendered as a map similar to
+//! * **`indexmap`** Add support for [indexmap](https://crates.io/crates/indexmap). When enabled `IndexMap` will be rendered as a map similar to
 //!   `BTreeMap` and `HashMap`.
-//! * **non_strict_integers** Add support for non-standard integer formats `int8`, `int16`, `uint8`, `uint16`, `uint32`, and `uint64`.
-//! * **rc_schema** Add `ToSchema` support for `Arc<T>` and `Rc<T>` types. **Note!** serde `rc` feature flag must be enabled separately to allow
+//! * **`non_strict_integers`** Add support for non-standard integer formats `int8`, `int16`, `uint8`, `uint16`, `uint32`, and `uint64`.
+//! * **`rc_schema`** Add `ToSchema` support for `Arc<T>` and `Rc<T>` types. **Note!** serde `rc` feature flag must be enabled separately to allow
 //!   serialization and deserialization of `Arc<T>` and `Rc<T>` types. See more about [serde feature flags](https://serde.rs/feature-flags.html).
 //!
 //! Utoipa implicitly has partial support for `serde` attributes. See [`ToSchema` derive][serde] for more details.
@@ -267,8 +268,11 @@
 
 pub mod openapi;
 
-use std::collections::{BTreeMap, HashMap};
+use std::borrow::Cow;
+use std::collections::BTreeMap;
 
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 pub use utoipa_gen::*;
 
 /// Trait for implementing OpenAPI specification in Rust.
@@ -351,46 +355,52 @@ pub trait OpenApi {
 /// # }
 /// #
 /// impl<'__s> utoipa::ToSchema<'__s> for Pet {
-///     fn schema() -> (&'__s str, utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>) {
-///          (
-///             "Pet",
-///             utoipa::openapi::ObjectBuilder::new()
-///                 .property(
-///                     "id",
-///                     utoipa::openapi::ObjectBuilder::new()
-///                         .schema_type(utoipa::openapi::schema::Type::Integer)
-///                         .format(Some(utoipa::openapi::SchemaFormat::KnownFormat(
-///                             utoipa::openapi::KnownFormat::Int64,
-///                         ))),
-///                 )
-///                 .required("id")
-///                 .property(
-///                     "name",
-///                     utoipa::openapi::ObjectBuilder::new()
-///                         .schema_type(utoipa::openapi::schema::Type::String),
-///                 )
-///                 .required("name")
-///                 .property(
-///                     "age",
-///                     utoipa::openapi::ObjectBuilder::new()
-///                         .schema_type(utoipa::openapi::schema::Type::Integer)
-///                         .format(Some(utoipa::openapi::SchemaFormat::KnownFormat(
-///                             utoipa::openapi::KnownFormat::Int32,
-///                         ))),
-///                 )
-///                 .example(Some(serde_json::json!({
-///                   "name":"bob the cat","id":1
-///                 })))
-///                 .into(),
-///         ) }
+///     fn name() -> std::borrow::Cow<'__s, str> {
+///         std::borrow::Cow::Borrowed("Pet")
+///     }
+/// }
+/// impl utoipa::PartialSchema for Pet {
+///     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+///         utoipa::openapi::ObjectBuilder::new()
+///             .property(
+///                 "id",
+///                 utoipa::openapi::ObjectBuilder::new()
+///                     .schema_type(utoipa::openapi::schema::Type::Integer)
+///                     .format(Some(utoipa::openapi::SchemaFormat::KnownFormat(
+///                         utoipa::openapi::KnownFormat::Int64,
+///                     ))),
+///             )
+///             .required("id")
+///             .property(
+///                 "name",
+///                 utoipa::openapi::ObjectBuilder::new()
+///                     .schema_type(utoipa::openapi::schema::Type::String),
+///             )
+///             .required("name")
+///             .property(
+///                 "age",
+///                 utoipa::openapi::ObjectBuilder::new()
+///                     .schema_type(utoipa::openapi::schema::Type::Integer)
+///                     .format(Some(utoipa::openapi::SchemaFormat::KnownFormat(
+///                         utoipa::openapi::KnownFormat::Int32,
+///                     ))),
+///             )
+///             .example(Some(serde_json::json!({
+///               "name":"bob the cat","id":1
+///             })))
+///             .into()
+///     }
 /// }
 /// ```
-pub trait ToSchema<'__s> {
+pub trait ToSchema<'__s>: PartialSchema {
     /// Return a tuple of name and schema or reference to a schema that can be referenced by the
     /// name or inlined directly to responses, request bodies or parameters.
-    fn schema() -> (&'__s str, openapi::RefOr<openapi::schema::Schema>);
+    fn name() -> Cow<'__s, str>;
+    // /// Return a tuple of name and schema or reference to a schema that can be referenced by the
+    // /// name or inlined directly to responses, request bodies or parameters.
+    // fn schema() -> (&'__s str, openapi::RefOr<openapi::schema::Schema>);
 
-    /// Optional set of alias schemas for the [`ToSchema::schema`].
+    /// Optional set of alias schemas for the [`PartialSchema::schema`].
     ///
     /// Typically there is no need to manually implement this method but it is instead implemented
     /// by derive [`macro@ToSchema`] when `#[aliases(...)]` attribute is defined.
@@ -401,7 +411,7 @@ pub trait ToSchema<'__s> {
 
 impl<'__s, T: ToSchema<'__s>> From<T> for openapi::RefOr<openapi::schema::Schema> {
     fn from(_: T) -> Self {
-        T::schema().1
+        T::schema()
     }
 }
 
@@ -410,9 +420,15 @@ impl<'__s, T: ToSchema<'__s>> From<T> for openapi::RefOr<openapi::schema::Schema
 /// [`openapi::schema::Schema`] for the type.
 pub type TupleUnit = ();
 
+impl PartialSchema for TupleUnit {
+    fn schema() -> openapi::RefOr<openapi::schema::Schema> {
+        openapi::schema::empty().into()
+    }
+}
+
 impl<'__s> ToSchema<'__s> for TupleUnit {
-    fn schema() -> (&'__s str, openapi::RefOr<openapi::schema::Schema>) {
-        ("TupleUnit", openapi::schema::empty().into())
+    fn name() -> Cow<'__s, str> {
+        Cow::Borrowed("TupleUnit")
     }
 }
 
@@ -424,6 +440,8 @@ macro_rules! impl_partial_schema {
         impl_partial_schema!( @impl_schema &$ty );
     };
     ( @impl_schema $( $tt:tt )* ) => {
+        #[cfg(feature = "macros")]
+        #[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
         impl PartialSchema for $($tt)* {
             fn schema() -> openapi::RefOr<openapi::schema::Schema> {
                 schema!( $($tt)* ).into()
@@ -441,6 +459,8 @@ macro_rules! impl_partial_schema_primitive {
 // Create `utoipa` module so we can use `utoipa-gen` directly from `utoipa` crate.
 // ONLY for internal use!
 #[doc(hidden)]
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 mod utoipa {
     pub use super::*;
 }
@@ -448,7 +468,7 @@ mod utoipa {
 /// Trait used to implement only _`Schema`_ part of the OpenAPI doc.
 ///
 /// This trait is by default implemented for Rust [`primitive`][primitive] types and some well known types like
-/// [`Vec`], [`Option`], [`HashMap`] and [`BTreeMap`]. The default implementation adds `schema()`
+/// [`Vec`], [`Option`], [`std::collections::HashMap`] and [`BTreeMap`]. The default implementation adds `schema()`
 /// method to the implementing type allowing simple conversion of the type to the OpenAPI Schema
 /// object. Moreover this allows handy way of constructing schema objects manually if ever so
 /// wished.
@@ -525,18 +545,24 @@ impl_partial_schema_primitive!(
 
 impl_partial_schema!(&str);
 
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 impl<'__s, T: ToSchema<'__s>> PartialSchema for Vec<T> {
     fn schema() -> openapi::RefOr<openapi::schema::Schema> {
         schema!(#[inline] Vec<T>).into()
     }
 }
 
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 impl<'__s, T: ToSchema<'__s>> PartialSchema for Option<Vec<T>> {
     fn schema() -> openapi::RefOr<openapi::schema::Schema> {
         schema!(#[inline] Option<Vec<T>>).into()
     }
 }
 
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 impl<'__s, T: ToSchema<'__s>> PartialSchema for [T] {
     fn schema() -> openapi::RefOr<openapi::schema::Schema> {
         schema!(
@@ -547,6 +573,8 @@ impl<'__s, T: ToSchema<'__s>> PartialSchema for [T] {
     }
 }
 
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 impl<'__s, T: ToSchema<'__s>> PartialSchema for &[T] {
     fn schema() -> openapi::RefOr<openapi::schema::Schema> {
         schema!(
@@ -557,6 +585,8 @@ impl<'__s, T: ToSchema<'__s>> PartialSchema for &[T] {
     }
 }
 
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 impl<'__s, T: ToSchema<'__s>> PartialSchema for &mut [T] {
     fn schema() -> openapi::RefOr<openapi::schema::Schema> {
         schema!(
@@ -567,6 +597,8 @@ impl<'__s, T: ToSchema<'__s>> PartialSchema for &mut [T] {
     }
 }
 
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 impl<'__s, T: ToSchema<'__s>> PartialSchema for Option<&[T]> {
     fn schema() -> openapi::RefOr<openapi::schema::Schema> {
         schema!(
@@ -577,6 +609,8 @@ impl<'__s, T: ToSchema<'__s>> PartialSchema for Option<&[T]> {
     }
 }
 
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 impl<'__s, T: ToSchema<'__s>> PartialSchema for Option<&mut [T]> {
     fn schema() -> openapi::RefOr<openapi::schema::Schema> {
         schema!(
@@ -587,12 +621,16 @@ impl<'__s, T: ToSchema<'__s>> PartialSchema for Option<&mut [T]> {
     }
 }
 
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 impl<'__s, T: ToSchema<'__s>> PartialSchema for Option<T> {
     fn schema() -> openapi::RefOr<openapi::schema::Schema> {
         schema!(#[inline] Option<T>).into()
     }
 }
 
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 impl<'__s, K: PartialSchema, V: ToSchema<'__s>> PartialSchema for BTreeMap<K, V> {
     fn schema() -> openapi::RefOr<openapi::schema::Schema> {
         schema!(
@@ -603,6 +641,8 @@ impl<'__s, K: PartialSchema, V: ToSchema<'__s>> PartialSchema for BTreeMap<K, V>
     }
 }
 
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 impl<'__s, K: PartialSchema, V: ToSchema<'__s>> PartialSchema for Option<BTreeMap<K, V>> {
     fn schema() -> openapi::RefOr<openapi::schema::Schema> {
         schema!(
@@ -613,21 +653,27 @@ impl<'__s, K: PartialSchema, V: ToSchema<'__s>> PartialSchema for Option<BTreeMa
     }
 }
 
-impl<'__s, K: PartialSchema, V: ToSchema<'__s>> PartialSchema for HashMap<K, V> {
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
+impl<'__s, K: PartialSchema, V: ToSchema<'__s>> PartialSchema for std::collections::HashMap<K, V> {
     fn schema() -> openapi::RefOr<openapi::schema::Schema> {
         schema!(
             #[inline]
-            HashMap<K, V>
+            std::collections::HashMap<K, V>
         )
         .into()
     }
 }
 
-impl<'__s, K: PartialSchema, V: ToSchema<'__s>> PartialSchema for Option<HashMap<K, V>> {
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
+impl<'__s, K: PartialSchema, V: ToSchema<'__s>> PartialSchema
+    for Option<std::collections::HashMap<K, V>>
+{
     fn schema() -> openapi::RefOr<openapi::schema::Schema> {
         schema!(
             #[inline]
-            Option<HashMap<K, V>>
+            Option<std::collections::HashMap<K, V>>
         )
         .into()
     }
@@ -642,6 +688,7 @@ impl<'__s, K: PartialSchema, V: ToSchema<'__s>> PartialSchema for Option<HashMap
 ///
 /// Use `#[utoipa::path(..)]` to implement Path trait
 /// ```rust
+/// # #[derive(utoipa::ToSchema)]
 /// # struct Pet {
 /// #   id: u64,
 /// #   name: String,
@@ -675,7 +722,7 @@ impl<'__s, K: PartialSchema, V: ToSchema<'__s>> PartialSchema for Option<HashMap
 /// utoipa::openapi::PathsBuilder::new().path(
 ///         "/pets/{id}",
 ///         utoipa::openapi::PathItem::new(
-///             utoipa::openapi::PathItemType::Get,
+///             utoipa::openapi::HttpMethod::Get,
 ///             utoipa::openapi::path::OperationBuilder::new()
 ///                 .responses(
 ///                     utoipa::openapi::ResponsesBuilder::new()
@@ -715,9 +762,11 @@ impl<'__s, K: PartialSchema, V: ToSchema<'__s>> PartialSchema for Option<HashMap
 ///
 /// [derive]: attr.path.html
 pub trait Path {
+    fn methods() -> Vec<openapi::path::HttpMethod>;
+
     fn path() -> String;
 
-    fn path_item() -> openapi::path::PathItem;
+    fn operation() -> openapi::path::Operation;
 }
 
 /// Trait that allows OpenApi modification at runtime.
@@ -938,48 +987,49 @@ pub trait ToResponse<'__r> {
 
 /// Internal dev module used internally by utoipa-gen
 #[doc(hidden)]
+#[cfg(feature = "macros")]
+#[cfg_attr(doc_cfg, doc(cfg(feature = "macros")))]
 pub mod __dev {
-
     use crate::{utoipa, OpenApi};
 
     pub trait PathConfig {
-        fn config() -> (String, Vec<&'static str>, utoipa::openapi::path::PathItem);
+        fn path() -> String;
+
+        fn methods() -> Vec<crate::openapi::path::HttpMethod>;
+
+        fn tags_and_operation() -> (Vec<&'static str>, utoipa::openapi::path::Operation);
     }
 
     pub trait Tags<'t> {
         fn tags() -> Vec<&'t str>;
     }
 
-    const DEFAULT_TAG: &str = "crate";
-
     impl<T: PathConfig> utoipa::Path for T {
         fn path() -> String {
-            <Self as PathConfig>::config().0.to_string()
+            <Self as PathConfig>::path()
         }
 
-        fn path_item() -> crate::openapi::path::PathItem {
-            let (_, tags, mut item) = <Self as PathConfig>::config();
+        fn methods() -> Vec<crate::openapi::path::HttpMethod> {
+            <Self as PathConfig>::methods()
+        }
 
-            for (_, operation) in item.operations.iter_mut() {
-                let operation_tags = operation.tags.get_or_insert(Vec::new());
-                operation_tags.extend(tags.iter().map(ToString::to_string));
-                // add deault tag if no tags is defined
-                if operation_tags.is_empty() {
-                    operation_tags.push(DEFAULT_TAG.to_string());
-                }
-            }
+        fn operation() -> crate::openapi::path::Operation {
+            let (tags, mut operation) = <Self as PathConfig>::tags_and_operation();
 
-            item
+            let operation_tags = operation.tags.get_or_insert(Vec::new());
+            operation_tags.extend(tags.iter().map(ToString::to_string));
+
+            operation
         }
     }
 
     pub trait NestedApiConfig {
-        fn config() -> (utoipa::openapi::OpenApi, Vec<&'static str>);
+        fn config() -> (utoipa::openapi::OpenApi, Vec<&'static str>, &'static str);
     }
 
     impl<T: NestedApiConfig> OpenApi for T {
         fn openapi() -> crate::openapi::OpenApi {
-            let (mut api, tags) = T::config();
+            let (mut api, tags, module_path) = T::config();
 
             api.paths
                 .paths
@@ -988,18 +1038,8 @@ pub mod __dev {
                 .for_each(|(_, operation)| {
                     let operation_tags = operation.tags.get_or_insert(Vec::new());
                     operation_tags.extend(tags.iter().map(ToString::to_string));
-                    // remove defualt tag if found and there are more than 1 tag
-                    if operation_tags.len() > 1 {
-                        let index = operation_tags.iter().enumerate().find_map(|(index, tag)| {
-                            if tag == DEFAULT_TAG {
-                                Some(index)
-                            } else {
-                                None
-                            }
-                        });
-                        if let Some(index) = index {
-                            operation_tags.remove(index);
-                        };
+                    if operation_tags.is_empty() && !module_path.is_empty() {
+                        operation_tags.push(module_path.to_string());
                     }
                 });
 

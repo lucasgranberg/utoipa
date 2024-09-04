@@ -7,12 +7,13 @@ use syn::{Attribute, GenericArgument, Path, PathArguments, PathSegment, Type, Ty
 
 use crate::doc_comment::CommentAttributes;
 use crate::schema_type::{SchemaFormat, SchemaTypeInner};
-use crate::{as_tokens_or_diagnostics, Diagnostics, OptionExt, ToTokensDiagnostics};
+use crate::{as_tokens_or_diagnostics, AttributesExt, Diagnostics, OptionExt, ToTokensDiagnostics};
 use crate::{schema_type::SchemaType, Deprecated};
 
+use self::features::attributes::{Description, Nullable};
+use self::features::validation::Minimum;
 use self::features::{
-    pop_feature, Description, Feature, FeaturesExt, IntoInner, IsInline, Minimum, Nullable,
-    ToTokensExt, Validatable,
+    pop_feature, Feature, FeaturesExt, IntoInner, IsInline, ToTokensExt, Validatable,
 };
 use self::schema::format_path_ref;
 use self::serde::{RenameRule, SerdeContainer, SerdeValue};
@@ -32,18 +33,11 @@ fn is_default(container_rules: &SerdeContainer, field_rule: &SerdeValue) -> bool
 /// Find `#[deprecated]` attribute from given attributes. Typically derive type attributes
 /// or field attributes of struct.
 fn get_deprecated(attributes: &[Attribute]) -> Option<Deprecated> {
-    attributes.iter().find_map(|attribute| {
-        if attribute
-            .path()
-            .get_ident()
-            .map(|ident| *ident == "deprecated")
-            .unwrap_or(false)
-        {
-            Some(Deprecated::True)
-        } else {
-            None
-        }
-    })
+    if attributes.has_deprecated() {
+        Some(Deprecated::True)
+    } else {
+        None
+    }
 }
 
 /// Check whether field is required based on following rules.
@@ -373,6 +367,26 @@ impl<'t> TypeTree<'t> {
     pub fn is_map(&self) -> bool {
         matches!(self.generic_type, Some(GenericType::Map))
     }
+
+    pub fn match_ident(&self, ident: &Ident) -> bool {
+        let Some(ref path) = self.path else {
+            return false;
+        };
+
+        let matches = path
+            .segments
+            .iter()
+            .last()
+            .map(|segment| &segment.ident == ident)
+            .unwrap_or_default();
+
+        matches
+            || self
+                .children
+                .iter()
+                .flatten()
+                .any(|child| child.match_ident(ident))
+    }
 }
 
 impl PartialEq for TypeTree<'_> {
@@ -484,6 +498,7 @@ pub struct ComponentSchemaProps<'c> {
     pub(crate) description: Option<&'c ComponentDescription<'c>>,
     pub(crate) deprecated: Option<&'c Deprecated>,
     pub object_name: &'c str,
+    pub is_generics_type_arg: bool,
 }
 
 #[cfg_attr(feature = "debug", derive(Debug))]
@@ -526,6 +541,7 @@ impl<'c> ComponentSchema {
             description,
             deprecated,
             object_name,
+            is_generics_type_arg,
         }: ComponentSchemaProps,
     ) -> Result<Self, Diagnostics> {
         let mut tokens = TokenStream::new();
@@ -540,6 +556,7 @@ impl<'c> ComponentSchema {
                 object_name,
                 description,
                 deprecated_stream,
+                is_generics_type_arg,
             )?,
             Some(GenericType::Vec | GenericType::LinkedList | GenericType::Set) => {
                 ComponentSchema::vec_to_tokens(
@@ -549,6 +566,7 @@ impl<'c> ComponentSchema {
                     object_name,
                     description,
                     deprecated_stream,
+                    is_generics_type_arg,
                 )?
             }
             #[cfg(feature = "smallvec")]
@@ -559,6 +577,7 @@ impl<'c> ComponentSchema {
                 object_name,
                 description,
                 deprecated_stream,
+                is_generics_type_arg,
             )?,
             Some(GenericType::Option) => {
                 // Add nullable feature if not already exists. Option is always nullable
@@ -581,6 +600,7 @@ impl<'c> ComponentSchema {
                     description,
                     deprecated,
                     object_name,
+                    is_generics_type_arg,
                 })?
                 .to_tokens(&mut tokens)?;
             }
@@ -597,6 +617,7 @@ impl<'c> ComponentSchema {
                     description,
                     deprecated,
                     object_name,
+                    is_generics_type_arg,
                 })?
                 .to_tokens(&mut tokens)?;
             }
@@ -614,6 +635,7 @@ impl<'c> ComponentSchema {
                     description,
                     deprecated,
                     object_name,
+                    is_generics_type_arg,
                 })?
                 .to_tokens(&mut tokens)?;
             }
@@ -624,6 +646,7 @@ impl<'c> ComponentSchema {
                 object_name,
                 description,
                 deprecated_stream,
+                is_generics_type_arg,
             )?,
         };
 
@@ -658,6 +681,7 @@ impl<'c> ComponentSchema {
         object_name: &str,
         description_stream: Option<&ComponentDescription<'_>>,
         deprecated_stream: Option<TokenStream>,
+        is_generics_type_arg: bool,
     ) -> Result<(), Diagnostics> {
         let example = features.pop_by(|feature| matches!(feature, Feature::Example(_)));
         let additional_properties = pop_feature!(features => Feature::AdditionalProperties(_));
@@ -685,6 +709,7 @@ impl<'c> ComponentSchema {
                     description: None,
                     deprecated: None,
                     object_name,
+                    is_generics_type_arg, // TODO check whether this is correct
                 })?;
                 let schema_tokens = as_tokens_or_diagnostics!(&schema_property);
 
@@ -715,6 +740,7 @@ impl<'c> ComponentSchema {
         object_name: &str,
         description_stream: Option<&ComponentDescription<'_>>,
         deprecated_stream: Option<TokenStream>,
+        is_generics_type_arg: bool,
     ) -> Result<(), Diagnostics> {
         let example = pop_feature!(features => Feature::Example(_));
         let xml = features.extract_vec_xml_feature(type_tree)?;
@@ -753,6 +779,7 @@ impl<'c> ComponentSchema {
             description: None,
             deprecated: None,
             object_name,
+            is_generics_type_arg,
         })?;
         let component_schema_tokens = as_tokens_or_diagnostics!(&component_schema);
 
@@ -816,6 +843,7 @@ impl<'c> ComponentSchema {
         object_name: &str,
         description_stream: Option<&ComponentDescription<'_>>,
         deprecated_stream: Option<TokenStream>,
+        is_generics_type_arg: bool,
     ) -> Result<(), Diagnostics> {
         let nullable_feat: Option<Nullable> =
             pop_feature!(features => Feature::Nullable(_)).into_inner();
@@ -904,12 +932,12 @@ impl<'c> ComponentSchema {
                             quote_spanned! {type_path.span()=>
                                 utoipa::openapi::schema::AllOfBuilder::new()
                                     #nullable_item
-                                    .item(<#type_path as utoipa::ToSchema>::schema().1)
+                                    .item(<#type_path as utoipa::PartialSchema>::schema())
                                     #default_tokens
                             }
                         } else {
                             quote_spanned! {type_path.span() =>
-                                <#type_path as utoipa::ToSchema>::schema().1
+                                <#type_path as utoipa::PartialSchema>::schema()
                             }
                         };
 
@@ -919,28 +947,45 @@ impl<'c> ComponentSchema {
                         if name == "Self" && !object_name.is_empty() {
                             name = Cow::Borrowed(object_name);
                         }
-
                         let default = pop_feature!(features => Feature::Default(_));
                         let default_tokens = as_tokens_or_diagnostics!(&default);
+
+                        // TODO partial schema check cannot be performed for generic type, we
+                        // need to know whether type is generic or not.
+                        let check_type = if !is_generics_type_arg {
+                            Some(
+                                quote_spanned! {type_path.span()=> let _ = <#type_path as utoipa::PartialSchema>::schema;},
+                            )
+                        } else {
+                            None
+                        };
 
                         // TODO: refs support `summary` field but currently there is no such field
                         // on schemas more over there is no way to distinct the `summary` from
                         // `description` of the ref. Should we consider supporting the summary?
                         let schema = if default.is_some() || nullable {
-                            quote! {
-                                utoipa::openapi::schema::AllOfBuilder::new()
-                                    #nullable_item
-                                    .item(utoipa::openapi::schema::RefBuilder::new()
-                                        #description_stream
-                                        .ref_location_from_schema_name(#name)
-                                    )
-                                    #default_tokens
+                            quote_spanned! {type_path.span()=>
+                                {
+                                    #check_type
+
+                                    utoipa::openapi::schema::AllOfBuilder::new()
+                                        #nullable_item
+                                        .item(utoipa::openapi::schema::RefBuilder::new()
+                                            #description_stream
+                                            .ref_location_from_schema_name(#name)
+                                        )
+                                        #default_tokens
+                                }
                             }
                         } else {
-                            quote! {
-                                utoipa::openapi::schema::RefBuilder::new()
-                                    #description_stream
-                                    .ref_location_from_schema_name(#name)
+                            quote_spanned! {type_path.span()=>
+                                {
+                                    #check_type
+
+                                    utoipa::openapi::schema::RefBuilder::new()
+                                        #description_stream
+                                        .ref_location_from_schema_name(#name)
+                                }
                             }
                         };
 
@@ -968,6 +1013,7 @@ impl<'c> ComponentSchema {
                                     description: None,
                                     deprecated: None,
                                     object_name,
+                                    is_generics_type_arg, // TODO check whether this is correct
                                 }) {
                                     Ok(child) => Ok(as_tokens_or_diagnostics!(&child)),
                                     Err(diagnostics) => Err(diagnostics),
@@ -1030,6 +1076,7 @@ impl FlattenedMapSchema {
             description,
             deprecated,
             object_name,
+            is_generics_type_arg,
         }: ComponentSchemaProps,
     ) -> Result<Self, Diagnostics> {
         let mut tokens = TokenStream::new();
@@ -1056,6 +1103,7 @@ impl FlattenedMapSchema {
             description: None,
             deprecated: None,
             object_name,
+            is_generics_type_arg,
         })?;
         let schema_tokens = as_tokens_or_diagnostics!(&schema_property);
 

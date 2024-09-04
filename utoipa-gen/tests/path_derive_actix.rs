@@ -1,15 +1,14 @@
 #![cfg(feature = "actix_extras")]
 
-use std::{fmt::Display, future::Ready};
-
 use actix_web::{
-    get, post,
+    get, post, route,
     web::{Json, Path, Query},
-    FromRequest, ResponseError,
+    FromRequest, Responder, ResponseError,
 };
 use assert_json_diff::assert_json_eq;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::{fmt::Display, future::Ready, todo};
 use utoipa::{
     openapi::{
         path::{Parameter, ParameterBuilder, ParameterIn},
@@ -318,6 +317,34 @@ fn derive_path_with_context_path() {
 
     #[utoipa::path(
         context_path = "/api",
+        responses(
+            (status = 200, description = "success response")
+        )
+    )]
+    #[get("/foo")]
+    #[allow(unused)]
+    async fn get_foo() -> impl Responder {
+        HttpResponse::Ok().json(json!({ "id": "foo" }))
+    }
+
+    #[derive(OpenApi, Default)]
+    #[openapi(paths(get_foo))]
+    struct ApiDoc;
+
+    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let path = doc.pointer("/paths/~1api~1foo/get").unwrap();
+
+    assert_ne!(path, &Value::Null, "expected path with context path /api");
+}
+
+#[test]
+fn derive_path_with_context_path_from_const() {
+    use actix_web::{get, HttpResponse, Responder};
+    use serde_json::json;
+    const CONTEXT: &str = "/api";
+
+    #[utoipa::path(
+        context_path = CONTEXT,
         responses(
             (status = 200, description = "success response")
         )
@@ -1097,8 +1124,30 @@ test_derive_path_operations! {
     derive_path_operation_delete, mod_test_delete: delete
     derive_path_operation_put, mod_test_put: put
     derive_path_operation_head, mod_test_head: head
-    derive_path_operation_connect, mod_test_connect: connect
     derive_path_operation_options, mod_test_options: options
     derive_path_operation_trace, mod_test_trace: trace
     derive_path_operation_patch, mod_test_patch: patch
+}
+
+#[test]
+fn derive_path_with_multiple_methods_skip_connect() {
+    #[utoipa::path(
+        responses(
+            (status = 200, description = "success response")
+        )
+    )]
+    #[route("/route foo", method = "GET", method = "HEAD", method = "CONNECT")]
+    #[allow(unused)]
+    async fn multiple_methods() -> impl Responder {
+        String::new()
+    }
+
+    use utoipa::Path;
+    assert_eq!(
+        vec![
+            utoipa::openapi::path::HttpMethod::Get,
+            utoipa::openapi::path::HttpMethod::Head
+        ],
+        __path_multiple_methods::methods()
+    )
 }

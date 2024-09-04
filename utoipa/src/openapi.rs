@@ -4,7 +4,7 @@ use serde::{
     de::{Error, Expected, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
 };
-use std::fmt::Formatter;
+use std::{collections::HashMap, fmt::Formatter};
 
 use self::path::PathsMap;
 pub use self::{
@@ -12,7 +12,7 @@ pub use self::{
     external_docs::ExternalDocs,
     header::{Header, HeaderBuilder},
     info::{Contact, ContactBuilder, Info, InfoBuilder, License, LicenseBuilder},
-    path::{PathItem, PathItemType, Paths, PathsBuilder},
+    path::{HttpMethod, PathItem, Paths, PathsBuilder},
     response::{Response, ResponseBuilder, Responses, ResponsesBuilder},
     schema::{
         AllOf, AllOfBuilder, Array, ArrayBuilder, Components, ComponentsBuilder, Discriminator,
@@ -124,6 +124,10 @@ builder! {
         /// All the references and invidual files could use their own schema dialect.
         #[serde(rename = "$schema", default, skip_serializing_if = "String::is_empty")]
         pub schema: String,
+
+        /// Optional extensions "x-something".
+        #[serde(skip_serializing_if = "Option::is_none", flatten)]
+        pub extensions: Option<HashMap<String, serde_json::Value>>,
     }
 }
 
@@ -255,13 +259,13 @@ impl OpenApi {
     /// ```rust
     ///  # use utoipa::openapi::{OpenApi, OpenApiBuilder};
     ///  # use utoipa::openapi::path::{PathsBuilder, PathItemBuilder, PathItem,
-    ///  # PathItemType, OperationBuilder};
+    ///  # HttpMethod, OperationBuilder};
     ///  let api = OpenApiBuilder::new()
     ///      .paths(
     ///          PathsBuilder::new().path(
     ///              "/api/v1/status",
     ///              PathItem::new(
-    ///                  PathItemType::Get,
+    ///                  HttpMethod::Get,
     ///                  OperationBuilder::new()
     ///                      .description(Some("Get status"))
     ///                      .build(),
@@ -273,7 +277,7 @@ impl OpenApi {
     ///     .paths(
     ///         PathsBuilder::new().path(
     ///             "/",
-    ///             PathItem::new(PathItemType::Post, OperationBuilder::new().build()),
+    ///             PathItem::new(HttpMethod::Post, OperationBuilder::new().build()),
     ///         )
     ///     )
     ///     .build();
@@ -672,21 +676,21 @@ mod tests {
                 .path(
                     "/api/v1/users",
                     PathItem::new(
-                        PathItemType::Get,
+                        HttpMethod::Get,
                         OperationBuilder::new().response("200", Response::new("Get users list")),
                     ),
                 )
                 .path(
                     "/api/v1/users",
                     PathItem::new(
-                        PathItemType::Post,
+                        HttpMethod::Post,
                         OperationBuilder::new().response("200", Response::new("Post new user")),
                     ),
                 )
                 .path(
                     "/api/v1/users/{id}",
                     PathItem::new(
-                        PathItemType::Get,
+                        HttpMethod::Get,
                         OperationBuilder::new().response("200", Response::new("Get user by id")),
                     ),
                 ),
@@ -710,7 +714,7 @@ mod tests {
                 .path(
                     "/api/v1/user",
                     PathItem::new(
-                        PathItemType::Get,
+                        HttpMethod::Get,
                         OperationBuilder::new().response("200", Response::new("Get user success")),
                     ),
                 )
@@ -724,7 +728,7 @@ mod tests {
                     .path(
                         "/api/v1/user",
                         PathItem::new(
-                            PathItemType::Get,
+                            HttpMethod::Get,
                             OperationBuilder::new()
                                 .response("200", Response::new("This will not get added")),
                         ),
@@ -732,7 +736,7 @@ mod tests {
                     .path(
                         "/ap/v2/user",
                         PathItem::new(
-                            PathItemType::Get,
+                            HttpMethod::Get,
                             OperationBuilder::new()
                                 .response("200", Response::new("Get user success 2")),
                         ),
@@ -740,7 +744,7 @@ mod tests {
                     .path(
                         "/api/v2/user",
                         PathItem::new(
-                            PathItemType::Post,
+                            HttpMethod::Post,
                             OperationBuilder::new()
                                 .response("200", Response::new("Get user success")),
                         ),
@@ -826,7 +830,7 @@ mod tests {
                 .path(
                     "/api/v1/user",
                     PathItem::new(
-                        PathItemType::Get,
+                        HttpMethod::Get,
                         OperationBuilder::new()
                             .response("200", Response::new("Get user success 1")),
                     ),
@@ -841,7 +845,7 @@ mod tests {
                     .path(
                         "/api/v1/user",
                         PathItem::new(
-                            PathItemType::Get,
+                            HttpMethod::Get,
                             OperationBuilder::new()
                                 .response("200", Response::new("This will not get added")),
                         ),
@@ -849,7 +853,7 @@ mod tests {
                     .path(
                         "/api/v1/user",
                         PathItem::new(
-                            PathItemType::Post,
+                            HttpMethod::Post,
                             OperationBuilder::new()
                                 .response("200", Response::new("Post user success 1")),
                         ),
@@ -857,7 +861,7 @@ mod tests {
                     .path(
                         "/api/v2/user",
                         PathItem::new(
-                            PathItemType::Get,
+                            HttpMethod::Get,
                             OperationBuilder::new()
                                 .response("200", Response::new("Get user success 2")),
                         ),
@@ -865,7 +869,7 @@ mod tests {
                     .path(
                         "/api/v2/user",
                         PathItem::new(
-                            PathItemType::Post,
+                            HttpMethod::Post,
                             OperationBuilder::new()
                                 .response("200", Response::new("Post user success 2")),
                         ),
@@ -955,7 +959,7 @@ mod tests {
                 PathsBuilder::new().path(
                     "/api/v1/status",
                     PathItem::new(
-                        PathItemType::Get,
+                        HttpMethod::Get,
                         OperationBuilder::new()
                             .description(Some("Get status"))
                             .build(),
@@ -970,7 +974,7 @@ mod tests {
                     .path(
                         "/",
                         PathItem::new(
-                            PathItemType::Get,
+                            HttpMethod::Get,
                             OperationBuilder::new()
                                 .description(Some("Get user details"))
                                 .build(),
@@ -978,7 +982,7 @@ mod tests {
                     )
                     .path(
                         "/foo",
-                        PathItem::new(PathItemType::Post, OperationBuilder::new().build()),
+                        PathItem::new(HttpMethod::Post, OperationBuilder::new().build()),
                     ),
             )
             .build();
@@ -1009,6 +1013,31 @@ mod tests {
                         "responses": {}
                     }
                 }
+            })
+        )
+    }
+
+    #[test]
+    fn openapi_custom_extension() {
+        let mut api = OpenApiBuilder::new().build();
+        let extensions = api.extensions.get_or_insert(HashMap::new());
+        extensions.insert(
+            String::from("x-tagGroup"),
+            String::from("anything that serializes to Json").into(),
+        );
+
+        let api_json = serde_json::to_value(api).expect("OpenApi must serialize to JSON");
+
+        assert_json_eq!(
+            api_json,
+            json!({
+                "info": {
+                    "title": "",
+                    "version": ""
+                },
+                "openapi": "3.1.0",
+                "paths": {},
+                "x-tagGroup": "anything that serializes to Json",
             })
         )
     }

@@ -13,10 +13,16 @@ use crate::{
     component::{
         self,
         features::{
-            impl_into_inner, parse_features, AllowReserved, Description, Example, ExclusiveMaximum,
-            ExclusiveMinimum, Explode, Feature, Format, MaxItems, MaxLength, Maximum, MinItems,
-            MinLength, Minimum, MultipleOf, Nullable, Pattern, ReadOnly, Style, ToTokensExt,
-            WriteOnly, XmlAttr,
+            attributes::{
+                AllowReserved, Description, Example, Explode, Format, Nullable, ReadOnly, Style,
+                WriteOnly, XmlAttr,
+            },
+            impl_into_inner, parse_features,
+            validation::{
+                ExclusiveMaximum, ExclusiveMinimum, MaxItems, MaxLength, Maximum, MinItems,
+                MinLength, Minimum, MultipleOf, Pattern,
+            },
+            Feature, ToTokensExt,
         },
         ComponentSchema,
     },
@@ -54,7 +60,10 @@ impl<'p> Parameter<'p> {
         match (self, other) {
             (Self::Value(value), Parameter::Value(other)) => {
                 let (schema_features, _) = &value.features;
-                value.parameter_schema = other.parameter_schema;
+                // if value parameter schema has not been defined use the external one
+                if value.parameter_schema.is_none() {
+                    value.parameter_schema = other.parameter_schema;
+                }
 
                 if let Some(parameter_schema) = &mut value.parameter_schema {
                     parameter_schema.features.clone_from(schema_features);
@@ -176,6 +185,8 @@ impl ToTokensDiagnostics for ParameterSchema<'_> {
                             description: None,
                             deprecated: None,
                             object_name: "",
+                            // TODO check whether this is correct
+                            is_generics_type_arg: false
                         }
                     )?),
                     required,
@@ -197,6 +208,8 @@ impl ToTokensDiagnostics for ParameterSchema<'_> {
                             description: None,
                             deprecated: None,
                             object_name: "",
+                            // TODO check whether this is correct
+                            is_generics_type_arg: false
                         }
                     )?),
                     required,
@@ -268,7 +281,9 @@ impl Parse for ValueParameter<'_> {
 
         if input.fork().parse::<ParameterIn>().is_ok() {
             parameter.parameter_in = input.parse()?;
-            input.parse::<Token![,]>()?;
+            if !input.is_empty() {
+                input.parse::<Token![,]>()?;
+            }
         }
 
         let (schema_features, parameter_features) = input
@@ -296,7 +311,7 @@ impl Parse for ParameterFeatures {
             Explode,
             AllowReserved,
             Example,
-            crate::component::features::Deprecated,
+            crate::component::features::attributes::Deprecated,
             Description,
             // param schema features
             Format,
