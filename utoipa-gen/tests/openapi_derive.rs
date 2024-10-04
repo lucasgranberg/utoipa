@@ -35,6 +35,29 @@ fn derive_openapi_with_security_requirement() {
 }
 
 #[test]
+fn derive_logical_or_security_requirement() {
+    #[derive(Default, OpenApi)]
+    #[openapi(security(
+        ("oauth" = ["a"]),
+        ("oauth" = ["b"]),
+    ))]
+    struct ApiDoc;
+
+    let doc_value = serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let security = doc_value
+        .pointer("/security")
+        .expect("should have security requirements");
+
+    assert_json_eq!(
+        security,
+        json!([
+            {"oauth": ["a"]},
+            {"oauth": ["b"]},
+        ])
+    );
+}
+
+#[test]
 fn derive_openapi_tags() {
     #[derive(OpenApi)]
     #[openapi(tags(
@@ -232,6 +255,7 @@ fn derive_openapi_with_servers() {
 fn derive_openapi_with_custom_info() {
     #[derive(OpenApi)]
     #[openapi(info(
+        terms_of_service = "http://localhost/terms",
         title = "title override",
         description = "description override",
         version = "1.0.0",
@@ -248,6 +272,7 @@ fn derive_openapi_with_custom_info() {
             json!(
                 {
                     "title": "title override",
+                    "termsOfService": "http://localhost/terms",
                     "description": "description override",
                     "license": {
                         "name": "MIT OR Apache-2.0",
@@ -333,6 +358,7 @@ fn derive_openapi_with_generic_response() {
 
 #[test]
 fn derive_openapi_with_generic_schema() {
+    #[derive(ToSchema)]
     struct Value;
 
     #[derive(Serialize, ToSchema)]
@@ -347,7 +373,7 @@ fn derive_openapi_with_generic_schema() {
     struct ApiDoc;
 
     let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
-    let schema = doc.pointer("/components/schemas/Pet");
+    let schema = doc.pointer("/components/schemas/Pet_Value");
 
     assert_json_eq!(
         schema,
@@ -365,6 +391,7 @@ fn derive_openapi_with_generic_schema() {
 
 #[test]
 fn derive_openapi_with_generic_schema_with_as() {
+    #[derive(ToSchema)]
     struct Value;
 
     #[derive(Serialize, ToSchema)]
@@ -380,7 +407,7 @@ fn derive_openapi_with_generic_schema_with_as() {
     struct ApiDoc;
 
     let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
-    let schema = doc.pointer("/components/schemas/api.models.Pet");
+    let schema = doc.pointer("/components/schemas/api.models.Pet_Value");
 
     assert_json_eq!(
         schema,
@@ -502,6 +529,165 @@ fn derive_nest_openapi_with_tags() {
                     "responses": {},
                     "tags": [ "random" ]
                 }
+            }
+        })
+    )
+}
+
+#[test]
+fn openapi_schemas_resolve_schema_references() {
+    #![allow(dead_code)]
+    use utoipa::ToSchema;
+
+    #[derive(ToSchema)]
+    enum Element<T> {
+        One(T),
+        Many(Vec<T>),
+    }
+
+    #[derive(ToSchema)]
+    struct Foobar;
+
+    #[derive(ToSchema)]
+    struct Account {
+        id: i32,
+    }
+
+    #[derive(ToSchema)]
+    struct Person {
+        name: String,
+        foo_bar: Foobar,
+        accounts: Vec<Option<Account>>,
+    }
+
+    #[derive(ToSchema)]
+    struct Yeah {
+        name: String,
+        foo_bar: Foobar,
+        accounts: Vec<Option<Account>>,
+    }
+
+    #[derive(ToSchema)]
+    struct Boo {
+        boo: bool,
+    }
+
+    #[derive(ToSchema)]
+    struct OneOfOne(Person);
+
+    #[derive(ToSchema)]
+    struct OneOfYeah(Yeah);
+
+    #[derive(ToSchema)]
+    struct ThisIsNone;
+
+    #[derive(ToSchema)]
+    enum EnumMixedContent {
+        ContentZero,
+        One(Foobar),
+        NamedSchema {
+            value: Account,
+            value2: Boo,
+            foo: ThisIsNone,
+            int: i32,
+            f: bool,
+        },
+        Many(Vec<Person>),
+    }
+
+    #[derive(ToSchema)]
+    struct Foob {
+        item: Element<String>,
+        item2: Element<Yeah>,
+    }
+
+    #[derive(OpenApi)]
+    #[openapi(components(schemas(Person, Foob, OneOfYeah, OneOfOne, EnumMixedContent, Element<String>)))]
+    struct ApiDoc;
+
+    let doc = ApiDoc::openapi();
+
+    let value = serde_json::to_value(&doc).expect("OpenAPI is JSON serializable");
+    let schemas = value.pointer("/components").unwrap();
+    let json = serde_json::to_string_pretty(&schemas).expect("OpenAPI is json serializable");
+    println!("{json}");
+
+    let expected =
+        include_str!("./testdata/openapi_schemas_resolve_inner_schema_references").trim();
+    assert_eq!(expected, json.trim());
+}
+
+#[test]
+fn openapi_resolvle_recursive_references() {
+    #![allow(dead_code)]
+    use utoipa::ToSchema;
+
+    #[derive(ToSchema)]
+    struct Foobar;
+
+    #[derive(ToSchema)]
+    struct Account {
+        id: i32,
+        foobar: Foobar,
+    }
+
+    #[derive(ToSchema)]
+    struct Person {
+        name: String,
+        accounts: Vec<Option<Account>>,
+    }
+
+    #[derive(OpenApi)]
+    #[openapi(components(schemas(Person)))]
+    struct ApiDoc;
+
+    let doc = ApiDoc::openapi();
+
+    let value = serde_json::to_value(doc).expect("OpenAPI is serde serializable");
+    let schemas = value
+        .pointer("/components/schemas")
+        .expect("OpenAPI must have schemas");
+
+    assert_json_eq!(
+        schemas,
+        json!({
+            "Account": {
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format": "int32",
+                    },
+                     "foobar": {
+                        "$ref": "#/components/schemas/Foobar"
+                    }
+                },
+                "type": "object",
+                "required": [ "id" , "foobar" ],
+            },
+            "Foobar": {
+                "default": null,
+            },
+            "Person": {
+                "properties": {
+                    "accounts": {
+                        "items": {
+                            "allOf": [
+                                {
+                                    "type": "null",
+                                },
+                                {
+                                    "$ref": "#/components/schemas/Account",
+                                }
+                            ]
+                        },
+                        "type": "array",
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                },
+                "type": "object",
+                "required": [ "name" , "accounts" ],
             }
         })
     )

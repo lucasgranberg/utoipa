@@ -1,10 +1,10 @@
-use std::{borrow::Cow, cell::RefCell, collections::HashMap, marker::PhantomData, vec};
+use std::{borrow::Cow, cell::RefCell, collections::HashMap, marker::PhantomData};
 
 use assert_json_diff::{assert_json_eq, assert_json_matches, CompareMode, Config, NumericMode};
 use serde::Serialize;
 use serde_json::{json, Value};
 use utoipa::openapi::{Object, ObjectBuilder};
-use utoipa::{OpenApi, ToSchema, TupleUnit};
+use utoipa::{OpenApi, ToSchema};
 
 mod common;
 
@@ -25,26 +25,6 @@ macro_rules! api_doc {
     };
     ( @schema $ident:ident $($tt:tt)* ) => {
          <$ident as utoipa::PartialSchema>::schema()
-    };
-}
-
-macro_rules! api_doc_aliases {
-    ( $(#[$meta:meta])* $key:ident $ident:ident $($tt:tt)* ) => {
-        {
-            #[derive(ToSchema)]
-            $(#[$meta])*
-            #[allow(unused)]
-            $key $ident $( $tt )*
-
-            let schema = api_doc_aliases!( @schema $ident $($tt)* );
-            serde_json::to_value(schema).unwrap()
-        }
-    };
-    ( @schema $ident:ident < $($life:lifetime , )? $generic:ident > $($tt:tt)* ) => {
-         <$ident<$generic> as utoipa::ToSchema>::aliases()
-    };
-    ( @schema $ident:ident $($tt:tt)* ) => {
-         <$ident as utoipa::ToSchema>::aliases()
     };
 }
 
@@ -82,12 +62,18 @@ fn derive_map_ref() {
         json!({
             "properties": {
                 "map": {
+                    "propertyNames": {
+                        "type": "string"
+                    },
                     "additionalProperties": {
                         "$ref": "#/components/schemas/Foo"
                     },
                     "type": "object",
                 },
                 "map2": {
+                    "propertyNames": {
+                        "type": "string"
+                    },
                     "additionalProperties": {
                         "type": "string",
                         "enum": ["Variant"]
@@ -348,6 +334,9 @@ fn derive_struct_with_default_attr_field() {
                     ]
                 },
                 "leases": {
+                    "propertyNames": {
+                        "type": "string"
+                    },
                     "additionalProperties": {
                         "$ref": "#/components/schemas/Book",
                     },
@@ -450,6 +439,9 @@ fn derive_struct_with_optional_properties() {
                 },
                 "metadata": {
                     "type": ["object", "null"],
+                    "propertyNames": {
+                        "type": "string"
+                    },
                     "additionalProperties": {
                         "type": "string"
                     }
@@ -528,6 +520,9 @@ fn derive_struct_with_comments() {
                 "map": {
                     "description": "Map description",
                     "type": "object",
+                    "propertyNames": {
+                        "type": "string"
+                    },
                     "additionalProperties": {
                         "type": "string"
                     },
@@ -858,24 +853,6 @@ fn derive_enum_with_schema_deprecated() {
 }
 
 #[test]
-fn derive_struct_with_generics() {
-    #[allow(unused)]
-    enum Type {
-        Foo,
-        Bar,
-    }
-    let status = api_doc! {
-        struct Status<Type> {
-            t: Type
-        }
-    };
-
-    assert_value! {status=>
-        "properties.t.$ref" = r###""#/components/schemas/Type""###, "Status t field"
-    };
-}
-
-#[test]
 fn derive_struct_with_lifetime_generics() {
     #[allow(unused)]
     let greeting = api_doc! {
@@ -1154,7 +1131,7 @@ fn derive_struct_unnamed_field_reference_with_comment() {
     );
 }
 
-/// Derive a complex enum with named and unnamed fields.
+/// Derive a mixed enum with named and unnamed fields.
 #[test]
 fn derive_complex_unnamed_field_reference_with_comment() {
     #[derive(Serialize, ToSchema)]
@@ -1174,6 +1151,7 @@ fn derive_complex_unnamed_field_reference_with_comment() {
             "oneOf": [
                 {
                     "type": "object",
+                    "description": "Since OpenAPI 3.1 the comments can be added to the Ref types as well",
                     "properties": {
                         "UnnamedFieldWithCommentReference": {
                             "$ref": "#/components/schemas/CommentedReference",
@@ -1212,15 +1190,12 @@ fn derive_enum_with_unnamed_primitive_field_with_tag() {
                     "required": ["tag"]
                 },
             ],
-            "discriminator": {
-                "propertyName": "tag"
-            }
         })
     );
 }
 
 #[test]
-fn derive_complex_enum_with_schema_properties() {
+fn derive_mixed_enum_with_schema_properties() {
     let value: Value = api_doc! {
         /// This is the description
         #[derive(Serialize)]
@@ -1322,10 +1297,7 @@ fn derive_enum_with_unnamed_single_field_with_tag() {
                         },
                     ],
                 }
-            ],
-            "discriminator": {
-                "propertyName": "enum"
-            }
+            ]
         })
     );
 }
@@ -1377,7 +1349,7 @@ fn derive_enum_with_named_fields_with_reference_with_tag() {
                 {
                     "allOf": [
                         {
-                        "$ref": "#/components/schemas/ReferenceValue",
+                            "$ref": "#/components/schemas/ReferenceValue",
                         },
                         {
                             "type": "object",
@@ -1407,16 +1379,12 @@ fn derive_enum_with_named_fields_with_reference_with_tag() {
                     "type": "object"
                 }
             ],
-            "discriminator": {
-                "propertyName": "enum"
-            }
         })
     );
 }
 
-/// Derive a complex enum with named and unnamed fields.
 #[test]
-fn derive_complex_enum() {
+fn derive_mixed_enum() {
     #[derive(Serialize, ToSchema)]
     struct Foo(String);
 
@@ -1480,7 +1448,79 @@ fn derive_complex_enum() {
 }
 
 #[test]
-fn derive_complex_enum_title() {
+fn derive_mixed_enum_deprecated_variants() {
+    #![allow(deprecated)]
+
+    #[derive(Serialize, ToSchema)]
+    struct Foo(String);
+
+    let value: Value = api_doc! {
+        #[derive(Serialize)]
+        enum Bar {
+            #[schema(deprecated)]
+            UnitValue,
+            #[deprecated]
+            NamedFields {
+                id: &'static str,
+                names: Option<Vec<String>>
+            },
+            #[deprecated]
+            UnnamedFields(Foo),
+        }
+    };
+
+    assert_json_eq!(
+        value,
+        json!({
+            "oneOf": [
+                {
+                    "deprecated": true,
+                    "type": "string",
+                    "enum": [
+                        "UnitValue",
+                    ],
+                },
+                {
+                    "deprecated": true,
+                    "type": "object",
+                    "properties": {
+                        "NamedFields": {
+                            "deprecated": true,
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "string",
+                                },
+                                "names": {
+                                    "type": ["array", "null"],
+                                    "items": {
+                                        "type": "string",
+                                    },
+                                },
+                            },
+                            "required": [
+                                "id",
+                            ],
+                        },
+                    },
+                    "required": ["NamedFields"],
+                },
+                {
+                    "deprecated": true,
+                    "type": "object",
+                    "properties": {
+                        "UnnamedFields": {
+                            "$ref": "#/components/schemas/Foo",
+                        },
+                    },
+                    "required": ["UnnamedFields"],
+                },
+            ],
+        })
+    );
+}
+#[test]
+fn derive_mixed_enum_title() {
     #[derive(Serialize, ToSchema)]
     struct Foo(String);
 
@@ -1543,7 +1583,7 @@ fn derive_complex_enum_title() {
 }
 
 #[test]
-fn derive_complex_enum_example() {
+fn derive_mixed_enum_example() {
     #[derive(Serialize, ToSchema)]
     struct Foo(String);
 
@@ -1608,7 +1648,7 @@ fn derive_complex_enum_example() {
 }
 
 #[test]
-fn derive_complex_enum_serde_rename_all() {
+fn derive_mixed_enum_serde_rename_all() {
     #[derive(Serialize, ToSchema)]
     struct Foo(String);
 
@@ -1673,7 +1713,7 @@ fn derive_complex_enum_serde_rename_all() {
 }
 
 #[test]
-fn derive_complex_enum_serde_rename_variant() {
+fn derive_mixed_enum_serde_rename_variant() {
     #[derive(Serialize, ToSchema)]
     struct Foo(String);
 
@@ -1780,7 +1820,7 @@ fn derive_struct_custom_rename() {
 }
 
 #[test]
-fn derive_complex_enum_custom_rename() {
+fn derive_mixed_enum_custom_rename() {
     let value: Value = api_doc! {
         #[schema(rename_all = "UPPERCASE")]
         enum PostType {
@@ -1864,7 +1904,7 @@ fn derive_complex_enum_custom_rename() {
 }
 
 #[test]
-fn derive_complex_enum_use_serde_rename_over_custom_rename() {
+fn derive_mixed_enum_use_serde_rename_over_custom_rename() {
     let value: Value = api_doc! {
         #[derive(serde::Deserialize)]
         #[serde(rename_all = "lowercase")]
@@ -1961,7 +2001,7 @@ fn derive_enum_with_title() {
 }
 
 #[test]
-fn derive_complex_enum_with_title() {
+fn derive_mixed_enum_with_title() {
     let value: Value = api_doc! {
         enum UserType {
             #[schema(title = "admin")]
@@ -2014,10 +2054,10 @@ fn derive_complex_enum_with_title() {
     )
 }
 
-/// Derive a complex enum with the serde `tag` container attribute applied for internal tagging.
+/// Derive a mixed enum with the serde `tag` container attribute applied for internal tagging.
 /// Note that tuple fields are not supported.
 #[test]
-fn derive_complex_enum_serde_tag() {
+fn derive_mixed_enum_serde_tag() {
     #[derive(Serialize)]
     #[allow(dead_code)]
     struct Foo(String);
@@ -2077,9 +2117,6 @@ fn derive_complex_enum_serde_tag() {
                     ],
                 },
             ],
-            "discriminator": {
-                "propertyName": "tag"
-            }
         })
     );
 }
@@ -2186,10 +2223,11 @@ fn derive_serde_flatten() {
 }
 
 #[test]
-fn derive_complex_enum_serde_untagged() {
+fn derive_mixed_enum_serde_untagged() {
     let value: Value = api_doc! {
         #[derive(Serialize)]
         #[serde(untagged)]
+        #[schema(title = "FooTitle")]
         enum Foo {
             Bar(i32),
             Baz(String),
@@ -2199,6 +2237,7 @@ fn derive_complex_enum_serde_untagged() {
     assert_json_eq!(
         value,
         json!({
+            "title": "FooTitle",
             "oneOf": [
                 {
                     "format": "int32",
@@ -2213,7 +2252,35 @@ fn derive_complex_enum_serde_untagged() {
 }
 
 #[test]
-fn derive_complex_enum_with_ref_serde_untagged() {
+fn derive_untagged_with_unit_variant() {
+    let value: Value = api_doc! {
+        #[derive(Serialize)]
+        #[serde(untagged)]
+        enum EnumWithUnit {
+            ValueNumber(i32),
+            ThisIsUnit,
+        }
+    };
+
+    assert_json_eq!(
+        value,
+        json!({
+            "oneOf": [
+                {
+                    "format": "int32",
+                    "type": "integer",
+                },
+                {
+                    "type": "null",
+                    "default": null,
+                },
+            ],
+        })
+    );
+}
+
+#[test]
+fn derive_mixed_enum_with_ref_serde_untagged() {
     #[derive(Serialize, ToSchema)]
     struct Foo {
         name: String,
@@ -2246,7 +2313,7 @@ fn derive_complex_enum_with_ref_serde_untagged() {
 }
 
 #[test]
-fn derive_complex_enum_with_ref_serde_untagged_named_fields() {
+fn derive_mixed_enum_with_ref_serde_untagged_named_fields() {
     #[derive(Serialize, ToSchema)]
     struct Bar {
         name: String,
@@ -2295,7 +2362,7 @@ fn derive_complex_enum_with_ref_serde_untagged_named_fields() {
 }
 
 #[test]
-fn derive_complex_enum_with_ref_serde_untagged_named_fields_rename_all() {
+fn derive_mixed_enum_with_ref_serde_untagged_named_fields_rename_all() {
     #[derive(Serialize, ToSchema)]
     struct Bar {
         name: String,
@@ -2346,7 +2413,7 @@ fn derive_complex_enum_with_ref_serde_untagged_named_fields_rename_all() {
 }
 
 #[test]
-fn derive_complex_enum_serde_adjacently_tagged() {
+fn derive_mixed_enum_serde_adjacently_tagged() {
     let value: Value = api_doc! {
         #[derive(Serialize)]
         #[serde(tag = "tag", content = "content")]
@@ -2375,8 +2442,8 @@ fn derive_complex_enum_serde_adjacently_tagged() {
                         },
                     },
                     "required": [
+                        "content",
                         "tag",
-                        "content"
                     ],
                 },
                 {
@@ -2393,20 +2460,17 @@ fn derive_complex_enum_serde_adjacently_tagged() {
                         },
                     },
                     "required": [
+                        "content",
                         "tag",
-                        "content"
                     ],
                 },
             ],
-            "discriminator": {
-                "propertyName": "tag",
-            },
         })
     );
 }
 
 #[test]
-fn derive_complex_enum_with_ref_serde_adjacently_tagged() {
+fn derive_mixed_enum_with_ref_serde_adjacently_tagged() {
     #[derive(Serialize, ToSchema)]
     struct Foo {
         name: String,
@@ -2441,8 +2505,8 @@ fn derive_complex_enum_with_ref_serde_adjacently_tagged() {
                         },
                     },
                     "required": [
+                        "content",
                         "tag",
-                        "content"
                     ],
                 },
                 {
@@ -2459,20 +2523,109 @@ fn derive_complex_enum_with_ref_serde_adjacently_tagged() {
                         },
                     },
                     "required": [
+                        "content",
                         "tag",
-                        "content"
                     ],
                 },
             ],
-            "discriminator": {
-                "propertyName": "tag",
-            },
         })
     );
 }
 
 #[test]
-fn derive_complex_enum_with_ref_serde_adjacently_tagged_named_fields() {
+fn derive_mixed_enum_with_discriminator_simple_form() {
+    #[derive(Serialize, ToSchema)]
+    struct FooInternal {
+        name: String,
+        age: u32,
+        bar: String,
+    }
+
+    #[derive(ToSchema, Serialize)]
+    struct BarBarInternal {
+        value: String,
+        bar: String,
+    }
+    let value: Value = api_doc! {
+        #[derive(Serialize)]
+        #[serde(untagged)]
+        #[schema(discriminator = "bar")]
+        enum BarInternal {
+            Baz(BarBarInternal),
+            FooBar(FooInternal),
+        }
+    };
+
+    assert_json_eq!(
+        value,
+        json!({
+            "oneOf": [
+                {
+                    "$ref": "#/components/schemas/BarBarInternal"
+                },
+                {
+                    "$ref": "#/components/schemas/FooInternal"
+                },
+            ],
+            "discriminator": {
+                "propertyName": "bar",
+            }
+        })
+    );
+}
+
+#[test]
+fn derive_mixed_enum_with_discriminator_with_mapping() {
+    #[derive(Serialize, ToSchema)]
+    struct FooInternal {
+        name: String,
+        age: u32,
+        bar_type: String,
+    }
+
+    #[derive(ToSchema, Serialize)]
+    struct BarBarInternal {
+        value: String,
+        bar_type: String,
+    }
+
+    let value: Value = api_doc! {
+        #[derive(Serialize)]
+        #[serde(untagged)]
+        #[schema(discriminator(property_name = "bar_type", mapping(
+            ("bar" = "#/components/schemas/BarBarInternal"),
+            ("foo" = "#/components/schemas/FooInternal"),
+        )))]
+        enum BarInternal {
+            Baz(BarBarInternal),
+            FooBar(FooInternal),
+        }
+    };
+
+    assert_json_eq!(
+        value,
+        json!({
+            "oneOf": [
+                {
+                    "$ref": "#/components/schemas/BarBarInternal"
+                },
+                {
+                    "$ref": "#/components/schemas/FooInternal"
+                },
+            ],
+            "discriminator": {
+                "propertyName": "bar_type",
+                "mapping": {
+                    "bar": "#/components/schemas/BarBarInternal",
+                    "foo": "#/components/schemas/FooInternal"
+                }
+            }
+        })
+    );
+}
+
+#[test]
+fn derive_mixed_enum_with_ref_serde_adjacently_tagged_named_fields() {
     #[derive(Serialize, ToSchema)]
     struct Bar {
         name: String,
@@ -2515,8 +2668,8 @@ fn derive_complex_enum_with_ref_serde_adjacently_tagged_named_fields() {
                         },
                     },
                     "required": [
-                      "tag",
-                      "content"
+                        "content",
+                        "tag",
                     ],
                 },
                 {
@@ -2541,20 +2694,17 @@ fn derive_complex_enum_with_ref_serde_adjacently_tagged_named_fields() {
                         },
                     },
                     "required": [
-                      "tag",
-                      "content",
+                        "content",
+                        "tag",
                     ],
                 },
             ],
-            "discriminator": {
-                "propertyName": "tag",
-            },
         })
     );
 }
 
 #[test]
-fn derive_complex_enum_with_ref_serde_adjacently_tagged_named_fields_rename_all() {
+fn derive_mixed_enum_with_ref_serde_adjacently_tagged_named_fields_rename_all() {
     #[derive(Serialize, ToSchema)]
     struct Bar {
         name: String,
@@ -2599,8 +2749,8 @@ fn derive_complex_enum_with_ref_serde_adjacently_tagged_named_fields_rename_all(
                         },
                     },
                     "required": [
-                      "tag",
-                      "content"
+                        "content",
+                        "tag",
                     ],
                 },
                 {
@@ -2625,20 +2775,17 @@ fn derive_complex_enum_with_ref_serde_adjacently_tagged_named_fields_rename_all(
                         },
                     },
                     "required": [
-                      "tag",
-                      "content",
+                        "content",
+                        "tag",
                     ],
                 },
             ],
-            "discriminator": {
-                "propertyName": "tag",
-            },
         })
     );
 }
 
 #[test]
-fn derive_complex_enum_serde_tag_title() {
+fn derive_mixed_enum_serde_tag_title() {
     #[derive(Serialize)]
     #[allow(dead_code)]
     struct Foo(String);
@@ -2695,9 +2842,6 @@ fn derive_complex_enum_serde_tag_title() {
                     ],
                 },
             ],
-            "discriminator": {
-                "propertyName": "tag"
-            }
         })
     );
 }
@@ -3070,11 +3214,36 @@ fn derive_struct_component_field_type_override() {
 }
 
 #[test]
-fn derive_struct_component_field_type_path_override() {
+fn derive_struct_component_field_type_path_override_returns_default_name() {
     mod path {
         pub mod to {
             #[derive(utoipa::ToSchema)]
-            pub struct Foo;
+            pub struct Foo(());
+        }
+    }
+    let post = api_doc! {
+        struct Post {
+            id: i32,
+            #[schema(value_type = path::to::Foo)]
+            value: i64,
+        }
+    };
+
+    let component_ref: &str = post
+        .pointer("/properties/value/$ref")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    assert_eq!(component_ref, "#/components/schemas/Foo");
+}
+
+#[test]
+fn derive_struct_component_field_type_path_override_with_as_returns_custom_name() {
+    mod path {
+        pub mod to {
+            #[derive(utoipa::ToSchema)]
+            #[schema(as = path::to::Foo)]
+            pub struct Foo(());
         }
     }
     let post = api_doc! {
@@ -3198,7 +3367,7 @@ fn derive_struct_override_type_with_a_reference() {
     mod custom {
         #[derive(utoipa::ToSchema)]
         #[allow(dead_code)]
-        pub struct NewBar;
+        pub struct NewBar(());
     }
 
     let value = api_doc! {
@@ -3214,7 +3383,7 @@ fn derive_struct_override_type_with_a_reference() {
             "type": "object",
             "properties": {
                 "field": {
-                    "$ref": "#/components/schemas/custom.NewBar"
+                    "$ref": "#/components/schemas/NewBar"
                 }
             },
             "required": ["field"]
@@ -3361,6 +3530,7 @@ fn derive_parse_serde_field_attributes() {
     let post = api_doc! {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
+        #[schema(bound = "")]
         struct Post<S> {
             #[serde(rename = "uuid")]
             id: String,
@@ -3412,10 +3582,10 @@ fn derive_parse_serde_simple_enum_attributes() {
 }
 
 #[test]
-fn derive_parse_serde_complex_enum() {
+fn derive_parse_serde_mixed_enum() {
     #[derive(Serialize, ToSchema)]
     struct Foo;
-    let complex_enum = api_doc! {
+    let mixed_enum = api_doc! {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         enum Bar {
@@ -3432,7 +3602,7 @@ fn derive_parse_serde_complex_enum() {
         }
     };
 
-    assert_value! {complex_enum=>
+    assert_value! {mixed_enum=>
         "oneOf.[0].enum" = r#"["unitValue"]"#, "Unit value enum"
         "oneOf.[0].type" = r#""string""#, "Unit value type"
 
@@ -3470,32 +3640,7 @@ fn derive_component_with_generic_types_having_path_expression() {
 }
 
 #[test]
-fn derive_component_with_aliases() {
-    #[derive(ToSchema)]
-    struct A;
-
-    #[derive(Debug, OpenApi)]
-    #[openapi(components(schemas(MyAlias)))]
-    struct ApiDoc;
-
-    #[derive(ToSchema)]
-    #[aliases(MyAlias = Bar<A>)]
-    struct Bar<R> {
-        #[allow(dead_code)]
-        bar: R,
-    }
-
-    let doc = ApiDoc::openapi();
-    let doc_value = &serde_json::to_value(doc).unwrap();
-
-    let value = doc_value.pointer("/components/schemas").unwrap();
-    assert_value! {value=>
-        "MyAlias.properties.bar.$ref" = r###""#/components/schemas/A""###, "MyAlias aliased property"
-    }
-}
-
-#[test]
-fn derive_complex_enum_as() {
+fn derive_mixed_enum_as() {
     #[derive(ToSchema)]
     struct Foobar;
 
@@ -3537,65 +3682,6 @@ fn derive_complex_enum_as() {
             ]
         })
     )
-}
-
-#[test]
-fn derive_component_with_primitive_aliases() {
-    #[derive(Debug, OpenApi)]
-    #[openapi(components(schemas(BarString, BarInt, Foo)))]
-    struct ApiDoc;
-
-    #[derive(ToSchema)]
-    #[aliases(BarString = Bar<String>, BarInt = Bar<i32>)]
-    struct Bar<R> {
-        #[allow(dead_code)]
-        bar: R,
-    }
-    #[derive(ToSchema)]
-    struct Foo {
-        #[allow(dead_code)]
-        #[schema(value_type=BarString)]
-        baz: Bar<String>,
-    }
-
-    let doc = ApiDoc::openapi();
-    let doc_value = &serde_json::to_value(doc).unwrap();
-
-    let value = doc_value.pointer("/components/schemas").unwrap();
-
-    assert_json_eq!(
-        value,
-        json!({
-            "BarString": {
-                "properties": {
-                    "bar": {
-                        "type": "string"
-                    }
-                },
-                "type": "object",
-                "required": ["bar"]
-            },
-            "BarInt": {
-                "properties": {
-                    "bar": {
-                        "type": "integer",
-                        "format": "int32",
-                    }
-               },
-                "type": "object",
-                "required": ["bar"]
-            },
-            "Foo": {
-                "properties": {
-                    "baz": {
-                        "$ref": "#/components/schemas/BarString",
-                    }
-               },
-                "type": "object",
-                "required": ["baz"]
-            }
-        })
-    );
 }
 
 #[test]
@@ -3688,7 +3774,7 @@ fn derive_component_with_to_schema_value_type() {
 }
 
 #[test]
-fn derive_component_with_complex_enum_lifetimes() {
+fn derive_component_with_mixed_enum_lifetimes() {
     #[derive(ToSchema)]
     struct Foo<'foo> {
         #[allow(unused)]
@@ -4109,6 +4195,9 @@ fn derive_struct_field_with_example() {
                 },
                 "field3": {
                     "type": "object",
+                    "propertyNames": {
+                        "type": "string"
+                    },
                     "additionalProperties": {
                         "type": "string",
                     },
@@ -4118,6 +4207,9 @@ fn derive_struct_field_with_example() {
                 },
                 "field4": {
                     "type": "object",
+                    "propertyNames": {
+                        "type": "string"
+                    },
                     "additionalProperties": {
                         "$ref": "#/components/schemas/MyStruct",
                     },
@@ -4620,133 +4712,6 @@ fn derive_schema_with_multiple_schema_attributes() {
 }
 
 #[test]
-fn derive_schema_with_generics_and_lifetimes() {
-    struct TResult;
-
-    let value = api_doc_aliases! {
-        #[aliases(Paginated1 = Paginated<'b, String>, Paginated2 = Paginated<'b, Cow<'c, bool>>)]
-        struct Paginated<'r, TResult> {
-            pub total: usize,
-            pub data: Vec<TResult>,
-            pub next: Option<&'r str>,
-            pub prev: Option<&'r str>,
-        }
-    };
-
-    let config = Config::new(CompareMode::Strict).numeric_mode(NumericMode::AssumeFloat);
-
-    assert_json_matches!(
-        value,
-        json!([
-            [
-                "Paginated1",
-                {
-                    "properties": {
-                        "data": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            }
-                    },
-                    "next": {
-                        "type": ["string", "null"],
-                    },
-                    "prev": {
-                        "type": ["string", "null"],
-                    },
-                    "total": {
-                        "type": "integer",
-                        "minimum": 0.0,
-                     }
-                    },
-                    "required": [
-                        "total",
-                        "data",
-                    ],
-                    "type": "object"
-                }
-            ],
-            [
-                "Paginated2",
-                {
-                    "properties": {
-                        "data": {
-                            "type": "array",
-                            "items": {
-                                "type": "boolean"
-                            }
-                        },
-                        "next": {
-                            "type": ["string", "null"],
-                        },
-                        "prev": {
-                            "type": ["string", "null"],
-                        },
-                        "total": {
-                            "type": "integer",
-                            "minimum": 0.0
-                        }
-                    },
-                    "required": [
-                        "total",
-                        "data",
-                    ],
-                    "type": "object"
-                }
-            ]
-        ]),
-        config
-    )
-}
-
-#[test]
-fn derive_struct_with_unit_alias() {
-    struct V;
-
-    let value = api_doc_aliases! {
-        #[aliases(UnitDataValue = DataValue<TupleUnit>)]
-        struct DataValue<V> {
-            name: String,
-            v: V,
-        }
-    };
-
-    #[derive(utoipa::OpenApi)]
-    #[openapi(components(schemas(TupleUnit)))]
-    struct ApiDoc;
-
-    let doc = ApiDoc::openapi();
-    let doc_value = serde_json::to_value(&doc).unwrap();
-    let unit = doc_value.pointer("/components/schemas/TupleUnit").unwrap();
-
-    assert_json_eq!(
-        value,
-        json!([[
-              "UnitDataValue",
-              {
-                  "properties": {
-                      "name": {
-                          "type": "string",
-                      },
-                      "v": {
-                          "$ref": "#/components/schemas/TupleUnit"
-                      },
-                  },
-                  "required": ["name", "v"],
-                  "type": "object"
-              }
-        ]])
-    );
-
-    assert_json_eq!(
-        unit,
-        json!({
-            "default": null,
-        })
-    );
-}
-
-#[test]
 fn derive_struct_with_deprecated_fields() {
     #[derive(ToSchema)]
     struct Foobar;
@@ -4794,6 +4759,9 @@ fn derive_struct_with_deprecated_fields() {
                     }
                 },
                 "map": {
+                    "propertyNames": {
+                        "type": "string"
+                    },
                     "additionalProperties": {
                         "type": "string"
                     },
@@ -4855,6 +4823,9 @@ fn derive_struct_with_schema_deprecated_fields() {
                     }
                 },
                 "map": {
+                    "propertyNames": {
+                        "type": "string"
+                    },
                     "additionalProperties": {
                         "type": "string"
                     },
@@ -5059,7 +5030,13 @@ fn derive_schema_with_unit_hashmap() {
         json!({
             "properties": {
                 "volumes": {
+                    "propertyNames": {
+                        "type": "string"
+                    },
                     "additionalProperties": {
+                        "propertyNames": {
+                            "default": null,
+                        },
                         "additionalProperties": {
                             "default": null,
                         },
@@ -5288,6 +5265,7 @@ fn derive_schema_with_docstring_on_unit_variant_of_enum() {
                     "type": "string"
                 },
                 {
+                    "description": "non-unit doc",
                     "properties": {
                         "NonUnitVariant": {
                             "description": "non-unit doc",
@@ -5320,35 +5298,33 @@ fn derive_schema_with_docstring_on_tuple_variant_first_element_option() {
     assert_json_eq!(
         value,
         json!(
-                {
-                  "oneOf": [
+            {
+                "oneOf": [
                     {
-                      "type": "object",
-                      "required": [
-                        "TupleVariantWithOptionFirst"
-                      ],
-                      "properties": {
-                        "TupleVariantWithOptionFirst": {
-                          "type": ["string", "null"],
-                          "description": "doc for tuple variant with Option as first element - I now produce a description"
+                        "type": "object",
+                        "required": [ "TupleVariantWithOptionFirst" ],
+                        "description": "doc for tuple variant with Option as first element - I now produce a description",
+                        "properties": {
+                            "TupleVariantWithOptionFirst": {
+                                "type": ["string", "null"],
+                                "description": "doc for tuple variant with Option as first element - I now produce a description"
+                            }
                         }
-                      }
                     },
                     {
-                      "type": "object",
-                      "required": [
-                        "TupleVariantWithNoOption"
-                      ],
-                      "properties": {
-                        "TupleVariantWithNoOption": {
-                          "type": "string",
-                          "description": "doc for tuple variant without Option as first element - I produce a description"
+                        "type": "object",
+                        "required": [ "TupleVariantWithNoOption" ],
+                        "description": "doc for tuple variant without Option as first element - I produce a description",
+                        "properties": {
+                            "TupleVariantWithNoOption": {
+                                "type": "string",
+                                "description": "doc for tuple variant without Option as first element - I produce a description"
+                            }
                         }
-                      }
                     }
-                  ],
-                  "description": "top level doc for My enum"
-                }
+                ],
+                "description": "top level doc for My enum"
+            }
         )
     );
 
@@ -5369,6 +5345,7 @@ fn derive_schema_with_docstring_on_tuple_variant_first_element_option() {
             "description": "top level doc for My enum",
             "oneOf": [
                 {
+                    "description": "doc for tuple variant with Option as first element - I now produce a description",
                     "properties": {
                         "TupleVariantWithOptionFirst": {
                             "description": "doc for tuple variant with Option as first element - I now produce a description",
@@ -5386,6 +5363,7 @@ fn derive_schema_with_docstring_on_tuple_variant_first_element_option() {
                     "type": "object"
                 },
                 {
+                    "description": "doc for tuple variant without Option as first element - I produce a description",
                     "properties": {
                         "TupleVariantWithOptionSecond": {
                             "description": "doc for tuple variant without Option as first element - I produce a description",
@@ -5476,7 +5454,7 @@ fn derive_simple_enum_description_override() {
 }
 
 #[test]
-fn derive_complex_enum_description_override() {
+fn derive_mixed_enum_description_override() {
     #[allow(unused)]
     #[derive(ToSchema)]
     struct User {
@@ -5637,4 +5615,69 @@ fn derive_schema_required_custom_type_required() {
             ]
         })
     );
+}
+
+#[test]
+fn derive_negative_numbers() {
+    let value = api_doc! {
+        #[schema(default)]
+        #[derive(Default)]
+        struct Negative {
+            #[schema(default = -1, minimum = -2.1)]
+            number: f64,
+            #[schema(default = -2, maximum = -3)]
+            solid_number: i64,
+        }
+    };
+
+    assert_json_eq! {
+        value,
+        json!({
+            "properties": {
+                "number": {
+                    "type": "number",
+                    "format": "double",
+                    "default": -1,
+                    "minimum": -2.1
+                },
+                "solid_number": {
+                    "format": "int64",
+                    "type": "integer",
+                    "default": -2,
+                    "maximum": -3,
+                }
+            },
+            "required": [ "number", "solid_number" ],
+            "type": "object"
+        })
+    }
+}
+
+#[test]
+fn derive_map_with_property_names() {
+    #![allow(unused)]
+
+    #[derive(ToSchema)]
+    enum Names {
+        Foo,
+        Bar,
+    }
+
+    let value = api_doc! {
+        struct Mapped(std::collections::BTreeMap<Names, String>);
+    };
+
+    assert_json_eq!(
+        value,
+        json!({
+            "propertyNames": {
+                "type": "string",
+                "enum": ["Foo", "Bar"]
+            },
+            "additionalProperties": {
+                "type": "string"
+            },
+            "type": "object"
+        })
+    )
 }

@@ -4,7 +4,7 @@ use serde::{
     de::{Error, Expected, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
 };
-use std::{collections::HashMap, fmt::Formatter};
+use std::{fmt::Formatter, mem};
 
 use self::path::PathsMap;
 pub use self::{
@@ -27,9 +27,11 @@ pub use self::{
 pub mod content;
 pub mod encoding;
 pub mod example;
+pub mod extensions;
 pub mod external_docs;
 pub mod header;
 pub mod info;
+pub mod link;
 pub mod path;
 pub mod request_body;
 pub mod response;
@@ -121,13 +123,13 @@ builder! {
         /// Schema keyword can be used to override default _`$schema`_ dialect which is by default
         /// “<https://spec.openapis.org/oas/3.1/dialect/base>”.
         ///
-        /// All the references and invidual files could use their own schema dialect.
+        /// All the references and individual files could use their own schema dialect.
         #[serde(rename = "$schema", default, skip_serializing_if = "String::is_empty")]
         pub schema: String,
 
         /// Optional extensions "x-something".
         #[serde(skip_serializing_if = "Option::is_none", flatten)]
-        pub extensions: Option<HashMap<String, serde_json::Value>>,
+        pub extensions: Option<Extensions>,
     }
 }
 
@@ -201,8 +203,8 @@ impl OpenApi {
 
         if !other.paths.paths.is_empty() {
             for (path, that) in &mut other.paths.paths {
-                if let Some(this) = self.paths.get_path_item(path) {
-                    that.operations.extend(this.operations.clone());
+                if let Some(this) = self.paths.paths.get_mut(path) {
+                    that.merge_operations(mem::take(this));
                 }
             }
             self.paths.paths.extend(other.paths.paths);
@@ -250,7 +252,7 @@ impl OpenApi {
     ///
     /// **If multiple** APIs are being nested with same `path` only the **last** one will be retained.
     ///
-    /// Method accpets two arguments, first is the path to prepend .e.g. _`/user`_. Second argument
+    /// Method accepts two arguments, first is the path to prepend .e.g. _`/user`_. Second argument
     /// is the [`OpenApi`] to prepend paths for.
     ///
     /// # Examples
@@ -423,6 +425,7 @@ impl<'de> Deserialize<'de> for OpenApiVersion {
 /// The value will serialize to boolean.
 #[derive(PartialEq, Eq, Clone, Default)]
 #[cfg_attr(feature = "debug", derive(Debug))]
+#[allow(missing_docs)]
 pub enum Deprecated {
     True,
     #[default]
@@ -469,6 +472,7 @@ impl<'de> Deserialize<'de> for Deprecated {
 ///
 /// The value will serialize to boolean.
 #[derive(PartialEq, Eq, Clone, Default)]
+#[allow(missing_docs)]
 #[cfg_attr(feature = "debug", derive(Debug))]
 pub enum Required {
     True,
@@ -520,7 +524,11 @@ impl<'de> Deserialize<'de> for Required {
 #[cfg_attr(feature = "debug", derive(Debug))]
 #[serde(untagged)]
 pub enum RefOr<T> {
+    /// Represents [`Ref`] reference to another OpenAPI object instance. e.g.
+    /// `$ref: #/components/schemas/Hello`
     Ref(Ref),
+    /// Represents any value that can be added to the [`struct@Components`] e.g. [`enum@Schema`]
+    /// or [`struct@Response`].
     T(T),
 }
 
@@ -580,17 +588,25 @@ pub(crate) use from;
 
 macro_rules! builder {
     ( $( #[$builder_meta:meta] )* $builder_name:ident; $(#[$meta:meta])* $vis:vis $key:ident $name:ident $( $tt:tt )* ) => {
-        builder!( @type_impl $( #[$meta] )* $vis $key $name $( $tt )* );
+        builder!( @type_impl $builder_name $( #[$meta] )* $vis $key $name $( $tt )* );
         builder!( @builder_impl $( #[$builder_meta] )* $builder_name $( #[$meta] )* $vis $key $name $( $tt )* );
     };
 
-    ( @type_impl $( #[$meta:meta] )* $vis:vis $key:ident $name:ident
+    ( @type_impl $builder_name:ident $( #[$meta:meta] )* $vis:vis $key:ident $name:ident
         { $( $( #[$field_meta:meta] )* $field_vis:vis $field:ident: $field_ty:ty, )* }
     ) => {
-
         $( #[$meta] )*
         $vis $key $name {
             $( $( #[$field_meta] )* $field_vis $field: $field_ty, )*
+        }
+
+        impl $name {
+            #[doc = concat!("Construct a new ", stringify!($builder_name), ".")]
+            #[doc = ""]
+            #[doc = concat!("This is effectively same as calling [`", stringify!($builder_name), "::new`]")]
+            $vis fn builder() -> $builder_name {
+                $builder_name::new()
+            }
         }
     };
 
@@ -622,6 +638,7 @@ macro_rules! builder {
         crate::openapi::from!($name $builder_name $( $field ),* );
     };
 }
+use crate::openapi::extensions::Extensions;
 pub(crate) use builder;
 
 #[cfg(test)]
@@ -1020,7 +1037,7 @@ mod tests {
     #[test]
     fn openapi_custom_extension() {
         let mut api = OpenApiBuilder::new().build();
-        let extensions = api.extensions.get_or_insert(HashMap::new());
+        let extensions = api.extensions.get_or_insert(Default::default());
         extensions.insert(
             String::from("x-tagGroup"),
             String::from("anything that serializes to Json").into(),

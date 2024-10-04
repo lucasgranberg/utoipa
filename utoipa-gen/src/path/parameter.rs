@@ -5,7 +5,7 @@ use quote::{quote, quote_spanned, ToTokens};
 use syn::{
     parenthesized,
     parse::{Parse, ParseBuffer, ParseStream},
-    Error, LitStr, Token, TypePath,
+    Error, Generics, LitStr, Token, TypePath,
 };
 
 use crate::{
@@ -24,12 +24,12 @@ use crate::{
             },
             Feature, ToTokensExt,
         },
-        ComponentSchema,
+        ComponentSchema, Container, TypeTree,
     },
     parse_utils, Diagnostics, Required, ToTokensDiagnostics,
 };
 
-use super::InlineType;
+use super::media_type::ParsedType;
 
 /// Parameter of request such as in path, header, query or cookie
 ///
@@ -178,40 +178,36 @@ impl ToTokensDiagnostics for ParameterSchema<'_> {
                 let required: Required = (!type_tree.is_option()).into();
 
                 to_tokens(
-                    as_tokens_or_diagnostics!(&ComponentSchema::new(
-                        component::ComponentSchemaProps {
-                            type_tree,
-                            features: Some(self.features.clone()),
-                            description: None,
-                            deprecated: None,
-                            object_name: "",
-                            // TODO check whether this is correct
-                            is_generics_type_arg: false
-                        }
-                    )?),
+                    ComponentSchema::new(component::ComponentSchemaProps {
+                        type_tree,
+                        features: self.features.clone(),
+                        description: None,
+                        container: &Container {
+                            generics: &Generics::default(),
+                        },
+                    })?
+                    .to_token_stream(),
                     required,
                 );
                 Ok(())
             }
             ParameterType::Parsed(inline_type) => {
-                let type_tree = inline_type.as_type_tree()?;
+                let type_tree = TypeTree::from_type(inline_type.ty.as_ref())?;
                 let required: Required = (!type_tree.is_option()).into();
                 let mut schema_features = Vec::<Feature>::new();
                 schema_features.clone_from(&self.features);
                 schema_features.push(Feature::Inline(inline_type.is_inline.into()));
 
                 to_tokens(
-                    as_tokens_or_diagnostics!(&ComponentSchema::new(
-                        component::ComponentSchemaProps {
-                            type_tree: &type_tree,
-                            features: Some(schema_features),
-                            description: None,
-                            deprecated: None,
-                            object_name: "",
-                            // TODO check whether this is correct
-                            is_generics_type_arg: false
-                        }
-                    )?),
+                    ComponentSchema::new(component::ComponentSchemaProps {
+                        type_tree: &type_tree,
+                        features: schema_features,
+                        description: None,
+                        container: &Container {
+                            generics: &Generics::default(),
+                        },
+                    })?
+                    .to_token_stream(),
                     required,
                 );
                 Ok(())
@@ -228,7 +224,7 @@ enum ParameterType<'p> {
         feature = "axum_extras"
     ))]
     External(crate::component::TypeTree<'p>),
-    Parsed(InlineType<'p>),
+    Parsed(ParsedType<'p>),
 }
 
 #[derive(Default)]

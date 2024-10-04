@@ -3,14 +3,11 @@
 //! Refer to [`SecurityScheme`] for usage and more details.
 //!
 //! [security]: https://spec.openapis.org/oas/latest.html#security-scheme-object
-use std::{
-    collections::{BTreeMap, HashMap},
-    iter,
-};
+use std::{collections::BTreeMap, iter};
 
 use serde::{Deserialize, Serialize};
 
-use super::builder;
+use super::{builder, extensions::Extensions};
 
 /// OpenAPI [security requirement][security] object.
 ///
@@ -185,6 +182,7 @@ pub enum SecurityScheme {
     /// OpenApi 3.1 type
     #[serde(rename = "mutualTLS")]
     MutualTls {
+        #[allow(missing_docs)]
         #[serde(skip_serializing_if = "Option::is_none")]
         description: Option<String>,
     },
@@ -343,6 +341,7 @@ impl HttpBuilder {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "debug", derive(Debug))]
 #[serde(rename_all = "lowercase")]
+#[allow(missing_docs)]
 pub enum HttpAuthScheme {
     Basic,
     Bearer,
@@ -431,7 +430,7 @@ pub struct OAuth2 {
 
     /// Optional extensions "x-something".
     #[serde(skip_serializing_if = "Option::is_none", flatten)]
-    pub extensions: Option<HashMap<String, serde_json::Value>>,
+    pub extensions: Option<Extensions>,
 }
 
 impl OAuth2 {

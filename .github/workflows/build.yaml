@@ -26,6 +26,7 @@ jobs:
           - utoipa-rapidoc
           - utoipa-scalar
           - utoipa-axum
+          - utoipa-config
       fail-fast: true
     runs-on: ubuntu-latest
 
@@ -47,6 +48,10 @@ jobs:
       - name: Resolve changed paths
         id: changes
         run: |
+          if [[ $GITHUB_EVENT_NAME != "pull_request" ]]; then
+            echo "changes=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           changes=false
           while read -r change; do
             if [[ "$change" == "utoipa-gen" && "${{ matrix.crate }}" == "utoipa-gen" && $changes == false ]]; then
@@ -64,6 +69,8 @@ jobs:
             elif [[ "$change" == "utoipa-scalar" && "${{ matrix.crate }}" == "utoipa-scalar" && $changes == false ]]; then
               changes=true
             elif [[ "$change" == "utoipa-axum" && "${{ matrix.crate }}" == "utoipa-axum" && $changes == false ]]; then
+              changes=true
+            elif [[ "$change" == "utoipa-config" && "${{ matrix.crate }}" == "utoipa-config" && $changes == false ]]; then
               changes=true
             fi
           done < <(git diff --name-only ${{ github.sha }}~ ${{ github.sha }} | grep .rs | awk -F \/ '{print $1}')
@@ -87,6 +94,17 @@ jobs:
           if [[ ${{ steps.changes.outputs.changes }} == true ]]; then
             ./scripts/test.sh ${{ matrix.crate }}
           fi
+
+  check-typos:
+    name: typos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: typos
+      - run: typos
+
   test-examples-compile:
     name: "test (examples)"
     runs-on: ubuntu-latest

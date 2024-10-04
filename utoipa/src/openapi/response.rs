@@ -1,7 +1,7 @@
 //! Implements [OpenApi Responses][responses].
 //!
 //! [responses]: https://spec.openapis.org/oas/latest.html#responses-object
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use crate::openapi::{Ref, RefOr};
 use crate::IntoResponses;
 
+use super::extensions::Extensions;
+use super::link::Link;
 use super::{builder, header::Header, set_value, Content};
 
 builder! {
@@ -31,6 +33,7 @@ builder! {
 }
 
 impl Responses {
+    /// Construct a new [`Responses`].
     pub fn new() -> Self {
         Default::default()
     }
@@ -121,7 +124,12 @@ builder! {
 
         /// Optional extensions "x-something".
         #[serde(skip_serializing_if = "Option::is_none", flatten)]
-        pub extensions: Option<HashMap<String, serde_json::Value>>,
+        pub extensions: Option<Extensions>,
+
+        /// A map of operations links that can be followed from the response. The key of the
+        /// map is a short name for the link.
+        #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+        pub links: BTreeMap<String, RefOr<Link>>,
     }
 }
 
@@ -158,8 +166,15 @@ impl ResponseBuilder {
     }
 
     /// Add openapi extensions (x-something) to the [`Header`].
-    pub fn extensions(mut self, extensions: Option<HashMap<String, serde_json::Value>>) -> Self {
+    pub fn extensions(mut self, extensions: Option<Extensions>) -> Self {
         set_value!(self extensions extensions)
+    }
+
+    /// Add link that can be followed from the response.
+    pub fn link<S: Into<String>, L: Into<RefOr<Link>>>(mut self, name: S, link: L) -> Self {
+        self.links.insert(name.into(), link.into());
+
+        self
     }
 }
 
@@ -219,7 +234,7 @@ impl ResponseExt for Response {
     fn json_schema_ref(mut self, ref_name: &str) -> Response {
         self.content.insert(
             "application/json".to_string(),
-            Content::new(crate::openapi::Ref::from_schema_name(ref_name)),
+            Content::new(Some(crate::openapi::Ref::from_schema_name(ref_name))),
         );
         self
     }
@@ -230,7 +245,7 @@ impl ResponseExt for ResponseBuilder {
     fn json_schema_ref(self, ref_name: &str) -> ResponseBuilder {
         self.content(
             "application/json",
-            Content::new(crate::openapi::Ref::from_schema_name(ref_name)),
+            Content::new(Some(crate::openapi::Ref::from_schema_name(ref_name))),
         )
     }
 }
@@ -254,7 +269,9 @@ mod tests {
             .description("A sample response")
             .content(
                 "application/json",
-                Content::new(crate::openapi::Ref::from_schema_name("MySchemaPayload")),
+                Content::new(Some(crate::openapi::Ref::from_schema_name(
+                    "MySchemaPayload",
+                ))),
             )
             .build();
         let serialized = serde_json::to_string_pretty(&request_body)?;

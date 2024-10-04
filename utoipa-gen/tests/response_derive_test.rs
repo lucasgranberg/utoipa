@@ -82,19 +82,19 @@ fn derive_enum_response() {
                 "application/json": {
                     "schema": {
                         "oneOf": [
-                        {
-                            "properties": {
-                                "Value": {
-                                    "type": "string"
-                                }
+                            {
+                                "properties": {
+                                    "Value": {
+                                        "type": "string"
+                                    }
+                                },
+                                "required": ["Value"],
+                                "type": "object",
                             },
-                            "required": ["Value"],
-                            "type": "object",
-                        },
-                        {
-                            "enum": ["Foobar"],
-                            "type": "string"
-                        }
+                            {
+                                "enum": ["Foobar"],
+                                "type": "string"
+                            }
                         ]
                     }
                 }
@@ -200,50 +200,6 @@ fn derive_response_with_attributes() {
                     }
                 }
             }
-        })
-    )
-}
-
-#[test]
-fn derive_response_with_multiple_content_types() {
-    #[derive(ToSchema, ToResponse)]
-    #[response(content_type = ["application/json", "text/xml"] )]
-    #[allow(unused)]
-    struct Person {
-        name: String,
-    }
-    let (name, v) = <Person as utoipa::ToResponse>::response();
-    let value = serde_json::to_value(v).unwrap();
-
-    assert_eq!("Person", name);
-    assert_json_eq!(
-        value,
-        json!({
-            "content": {
-                "application/json": {
-                    "schema": {
-                        "properties": {
-                            "name": {
-                                "type": "string"
-                            }
-                        },
-                        "type": "object",
-                        "required": ["name"]
-                    }
-                },
-                "text/xml": {
-                    "schema": {
-                        "properties": {
-                            "name": {
-                                "type": "string"
-                            }
-                        },
-                        "type": "object",
-                        "required": ["name"]
-                    }
-                }
-            },
-            "description": ""
         })
     )
 }

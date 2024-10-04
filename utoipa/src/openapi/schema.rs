@@ -2,11 +2,12 @@
 //! used to define field properties, enum values, array or object types.
 //!
 //! [schema]: https://spec.openapis.org/oas/latest.html#schema-object
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use super::extensions::Extensions;
 use super::RefOr;
 use super::{builder, security::SecurityScheme, set_value, xml::Xml, Deprecated, Response};
 use crate::{ToResponse, ToSchema};
@@ -134,21 +135,28 @@ impl ComponentsBuilder {
         self
     }
 
-    pub fn schema_from<'s, I: ToSchema<'s>>(mut self) -> Self {
-        let aliases = I::aliases();
+    /// Add [`Schema`] to [`Components`].
+    ///
+    /// This is effectively same as calling [`ComponentsBuilder::schema`] but expects to be called
+    /// with one generic argument that implements [`ToSchema`][trait@ToSchema] trait.
+    ///
+    /// # Examples
+    ///
+    /// _**Add schema from `Value` type that derives `ToSchema`.**_
+    ///
+    /// ```rust
+    /// # use utoipa::{ToSchema, openapi::schema::ComponentsBuilder};
+    ///  #[derive(ToSchema)]
+    ///  struct Value(String);
+    ///
+    ///  let _ = ComponentsBuilder::new().schema_from::<Value>().build();
+    /// ```
+    pub fn schema_from<I: ToSchema>(mut self) -> Self {
+        let name = I::name();
+        let schema = I::schema();
+        self.schemas.insert(name.to_string(), schema);
 
-        // TODO a temporal hack to add the main schema only if there are no aliases pre-defined.
-        // Eventually aliases functionality should be extracted out from the `ToSchema`. Aliases
-        // are created when the main schema is a generic type which should be included in OpenAPI
-        // spec in its generic form.
-        if aliases.is_empty() {
-            let name = I::name();
-            let schema = I::schema();
-            // let (name, schema) = I::schema();
-            self.schemas.insert(name.to_string(), schema);
-        }
-
-        self.schemas_from_iter(aliases)
+        self
     }
 
     /// Add [`Schema`]s from iterator.
@@ -186,6 +194,10 @@ impl ComponentsBuilder {
         self
     }
 
+    /// Add [`struct@Response`] to [`Components`].
+    ///
+    /// Method accepts tow arguments; `name` of the reusable response and `response` which is the
+    /// reusable response itself.
     pub fn response<S: Into<String>, R: Into<RefOr<Response>>>(
         mut self,
         name: S,
@@ -195,11 +207,20 @@ impl ComponentsBuilder {
         self
     }
 
+    /// Add [`struct@Response`] to [`Components`].
+    ///
+    /// This behaves the same way as [`ComponentsBuilder::schema_from`] but for responses. It
+    /// allows adding response from type implementing [`trait@ToResponse`] trait. Method is
+    /// expected to be called with one generic argument that implements the trait.
     pub fn response_from<'r, I: ToResponse<'r>>(self) -> Self {
         let (name, response) = I::response();
         self.response(name, response)
     }
 
+    /// Add multiple [`struct@Response`]s to [`Components`] from iterator.
+    ///
+    /// Like the [`ComponentsBuilder::schemas_from_iter`] this allows adding multiple responses by
+    /// any iterator what returns tuples of (name, response) values.
     pub fn responses_from_iter<
         I: IntoIterator<Item = (S, R)>,
         S: Into<String>,
@@ -252,7 +273,7 @@ pub enum Schema {
     Object(Object),
     /// Creates a _OneOf_ type [composite Object][composite] schema. This schema
     /// is used to map multiple schemas together where API endpoint could return any of them.
-    /// [`Schema::OneOf`] is created form complex enum where enum holds other than unit types.
+    /// [`Schema::OneOf`] is created form mixed enum where enum contains various variants.
     ///
     /// [composite]: https://spec.openapis.org/oas/latest.html#components-object
     OneOf(OneOf),
@@ -309,6 +330,41 @@ impl Discriminator {
             mapping: BTreeMap::new(),
         }
     }
+
+    /// Construct a new [`Discriminator`] object with property name and mappings.
+    ///
+    ///
+    /// Method accepts two arguments. First _`property_name`_ to use as `discriminator` and
+    /// _`mapping`_ for custom property name mappings.
+    ///
+    /// # Examples
+    ///
+    ///_**Construct an ew [`Discriminator`] with custom mapping.**_
+    ///
+    /// ```rust
+    /// # use utoipa::openapi::schema::Discriminator;
+    /// let discriminator = Discriminator::with_mapping("pet_type", [
+    ///     ("cat","#/components/schemas/Cat")
+    /// ]);
+    /// ```
+    pub fn with_mapping<
+        P: Into<String>,
+        M: IntoIterator<Item = (K, V)>,
+        K: Into<String>,
+        V: Into<String>,
+    >(
+        property_name: P,
+        mapping: M,
+    ) -> Self {
+        Self {
+            property_name: property_name.into(),
+            mapping: BTreeMap::from_iter(
+                mapping
+                    .into_iter()
+                    .map(|(key, val)| (key.into(), val.into())),
+            ),
+        }
+    }
 }
 
 builder! {
@@ -363,7 +419,7 @@ builder! {
 
         /// Optional extensions `x-something`.
         #[serde(skip_serializing_if = "Option::is_none", flatten)]
-        pub extensions: Option<HashMap<String, serde_json::Value>>,
+        pub extensions: Option<Extensions>,
     }
 }
 
@@ -461,7 +517,7 @@ impl OneOfBuilder {
     }
 
     /// Add openapi extensions (`x-something`) for [`OneOf`].
-    pub fn extensions(mut self, extensions: Option<HashMap<String, serde_json::Value>>) -> Self {
+    pub fn extensions(mut self, extensions: Option<Extensions>) -> Self {
         set_value!(self extensions extensions)
     }
 
@@ -534,7 +590,7 @@ builder! {
 
         /// Optional extensions `x-something`.
         #[serde(skip_serializing_if = "Option::is_none", flatten)]
-        pub extensions: Option<HashMap<String, serde_json::Value>>,
+        pub extensions: Option<Extensions>,
     }
 }
 
@@ -632,7 +688,7 @@ impl AllOfBuilder {
     }
 
     /// Add openapi extensions (`x-something`) for [`AllOf`].
-    pub fn extensions(mut self, extensions: Option<HashMap<String, serde_json::Value>>) -> Self {
+    pub fn extensions(mut self, extensions: Option<Extensions>) -> Self {
         set_value!(self extensions extensions)
     }
 
@@ -701,7 +757,7 @@ builder! {
 
         /// Optional extensions `x-something`.
         #[serde(skip_serializing_if = "Option::is_none", flatten)]
-        pub extensions: Option<HashMap<String, serde_json::Value>>,
+        pub extensions: Option<Extensions>,
     }
 }
 
@@ -793,7 +849,7 @@ impl AnyOfBuilder {
     }
 
     /// Add openapi extensions (`x-something`) for [`AnyOf`].
-    pub fn extensions(mut self, extensions: Option<HashMap<String, serde_json::Value>>) -> Self {
+    pub fn extensions(mut self, extensions: Option<Extensions>) -> Self {
         set_value!(self extensions extensions)
     }
 
@@ -876,6 +932,11 @@ builder! {
         #[serde(skip_serializing_if = "Option::is_none")]
         pub additional_properties: Option<Box<AdditionalProperties<Schema>>>,
 
+        /// Additional [`Schema`] to describe property names of an object such as a map. See more
+        /// details <https://json-schema.org/draft/2020-12/draft-bhutton-json-schema-01#name-propertynames>
+        #[serde(skip_serializing_if = "Option::is_none")]
+        pub property_names: Option<Box<Schema>>,
+
         /// Changes the [`Object`] deprecated status.
         #[serde(skip_serializing_if = "Option::is_none")]
         pub deprecated: Option<Deprecated>,
@@ -905,27 +966,27 @@ builder! {
         /// Must be a number strictly greater than `0`. Numeric value is considered valid if value
         /// divided by the _`multiple_of`_ value results an integer.
         #[serde(skip_serializing_if = "Option::is_none", serialize_with = "omit_decimal_zero")]
-        pub multiple_of: Option<f64>,
+        pub multiple_of: Option<crate::utoipa::Number>,
 
         /// Specify inclusive upper limit for the [`Object`]'s value. Number is considered valid if
         /// it is equal or less than the _`maximum`_.
         #[serde(skip_serializing_if = "Option::is_none", serialize_with = "omit_decimal_zero")]
-        pub maximum: Option<f64>,
+        pub maximum: Option<crate::utoipa::Number>,
 
         /// Specify inclusive lower limit for the [`Object`]'s value. Number value is considered
         /// valid if it is equal or greater than the _`minimum`_.
         #[serde(skip_serializing_if = "Option::is_none", serialize_with = "omit_decimal_zero")]
-        pub minimum: Option<f64>,
+        pub minimum: Option<crate::utoipa::Number>,
 
         /// Specify exclusive upper limit for the [`Object`]'s value. Number value is considered
         /// valid if it is strictly less than _`exclusive_maximum`_.
         #[serde(skip_serializing_if = "Option::is_none", serialize_with = "omit_decimal_zero")]
-        pub exclusive_maximum: Option<f64>,
+        pub exclusive_maximum: Option<crate::utoipa::Number>,
 
         /// Specify exclusive lower limit for the [`Object`]'s value. Number value is considered
         /// valid if it is strictly above the _`exclusive_minimum`_.
         #[serde(skip_serializing_if = "Option::is_none", serialize_with = "omit_decimal_zero")]
-        pub exclusive_minimum: Option<f64>,
+        pub exclusive_minimum: Option<crate::utoipa::Number>,
 
         /// Specify maximum length for `string` values. _`max_length`_ cannot be a negative integer
         /// value. Value is considered valid if content length is equal or less than the _`max_length`_.
@@ -954,13 +1015,13 @@ builder! {
 
         /// Optional extensions `x-something`.
         #[serde(skip_serializing_if = "Option::is_none", flatten)]
-        pub extensions: Option<HashMap<String, serde_json::Value>>,
+        pub extensions: Option<Extensions>,
 
         /// The `content_encoding` keyword specifies the encoding used to store the contents, as specified in
         /// [RFC 2054, part 6.1](https://tools.ietf.org/html/rfc2045) and [RFC 4648](RFC 2054, part 6.1).
         ///
         /// Typically this is either unset for _`string`_ content types which then uses the content
-        /// encoding of the underying JSON document. If the content is in _`binary`_ format such as an image or an audio
+        /// encoding of the underlying JSON document. If the content is in _`binary`_ format such as an image or an audio
         /// set it to `base64` to encode it as _`Base64`_.
         ///
         /// See more details at <https://json-schema.org/understanding-json-schema/reference/non_json_data#contentencoding>
@@ -1038,11 +1099,18 @@ impl ObjectBuilder {
         self
     }
 
+    /// Add additional [`Schema`] for non specified fields (Useful for typed maps).
     pub fn additional_properties<I: Into<AdditionalProperties<Schema>>>(
         mut self,
         additional_properties: Option<I>,
     ) -> Self {
         set_value!(self additional_properties additional_properties.map(|additional_properties| Box::new(additional_properties.into())))
+    }
+
+    /// Add additional [`Schema`] to describe property names of an object such as a map. See more
+    /// details <https://json-schema.org/draft/2020-12/draft-bhutton-json-schema-01#name-propertynames>
+    pub fn property_names<S: Into<Schema>>(mut self, property_name: Option<S>) -> Self {
+        set_value!(self property_names property_name.map(|property_name| Box::new(property_name.into())))
     }
 
     /// Add field to the required fields of [`Object`].
@@ -1110,28 +1178,34 @@ impl ObjectBuilder {
     }
 
     /// Set or change _`multiple_of`_ validation flag for `number` and `integer` type values.
-    pub fn multiple_of(mut self, multiple_of: Option<f64>) -> Self {
-        set_value!(self multiple_of multiple_of)
+    pub fn multiple_of<N: Into<crate::utoipa::Number>>(mut self, multiple_of: Option<N>) -> Self {
+        set_value!(self multiple_of multiple_of.map(|multiple_of| multiple_of.into()))
     }
 
     /// Set or change inclusive maximum value for `number` and `integer` values.
-    pub fn maximum(mut self, maximum: Option<f64>) -> Self {
-        set_value!(self maximum maximum)
+    pub fn maximum<N: Into<crate::utoipa::Number>>(mut self, maximum: Option<N>) -> Self {
+        set_value!(self maximum maximum.map(|max| max.into()))
     }
 
     /// Set or change inclusive minimum value for `number` and `integer` values.
-    pub fn minimum(mut self, minimum: Option<f64>) -> Self {
-        set_value!(self minimum minimum)
+    pub fn minimum<N: Into<crate::utoipa::Number>>(mut self, minimum: Option<N>) -> Self {
+        set_value!(self minimum minimum.map(|min| min.into()))
     }
 
     /// Set or change exclusive maximum value for `number` and `integer` values.
-    pub fn exclusive_maximum(mut self, exclusive_maximum: Option<f64>) -> Self {
-        set_value!(self exclusive_maximum exclusive_maximum)
+    pub fn exclusive_maximum<N: Into<crate::utoipa::Number>>(
+        mut self,
+        exclusive_maximum: Option<N>,
+    ) -> Self {
+        set_value!(self exclusive_maximum exclusive_maximum.map(|exclusive_maximum| exclusive_maximum.into()))
     }
 
     /// Set or change exclusive minimum value for `number` and `integer` values.
-    pub fn exclusive_minimum(mut self, exclusive_minimum: Option<f64>) -> Self {
-        set_value!(self exclusive_minimum exclusive_minimum)
+    pub fn exclusive_minimum<N: Into<crate::utoipa::Number>>(
+        mut self,
+        exclusive_minimum: Option<N>,
+    ) -> Self {
+        set_value!(self exclusive_minimum exclusive_minimum.map(|exclusive_minimum| exclusive_minimum.into()))
     }
 
     /// Set or change maximum length for `string` values.
@@ -1160,7 +1234,7 @@ impl ObjectBuilder {
     }
 
     /// Add openapi extensions (`x-something`) for [`Object`].
-    pub fn extensions(mut self, extensions: Option<HashMap<String, serde_json::Value>>) -> Self {
+    pub fn extensions(mut self, extensions: Option<Extensions>) -> Self {
         set_value!(self extensions extensions)
     }
 
@@ -1184,6 +1258,17 @@ component_from_builder!(ObjectBuilder);
 impl From<ObjectBuilder> for RefOr<Schema> {
     fn from(builder: ObjectBuilder) -> Self {
         Self::T(Schema::Object(builder.build()))
+    }
+}
+
+impl From<RefOr<Schema>> for Schema {
+    fn from(value: RefOr<Schema>) -> Self {
+        match value {
+            RefOr::Ref(_) => {
+                panic!("Invalid type `RefOr::Ref` provided, cannot convert to RefOr::T<Schema>")
+            }
+            RefOr::T(value) => value,
+        }
     }
 }
 
@@ -1233,6 +1318,12 @@ impl From<RefBuilder> for AdditionalProperties<Schema> {
 impl From<Schema> for AdditionalProperties<Schema> {
     fn from(value: Schema) -> Self {
         Self::RefOr(RefOr::T(value))
+    }
+}
+
+impl From<AllOfBuilder> for AdditionalProperties<Schema> {
+    fn from(value: AllOfBuilder) -> Self {
+        Self::RefOr(RefOr::T(Schema::AllOf(value.build())))
     }
 }
 
@@ -1301,7 +1392,7 @@ impl RefBuilder {
         set_value!(self ref_location format!("#/components/schemas/{}", schema_name.into()))
     }
 
-    // TODO: REMOVE THE unnecesary description Option wrapping.
+    // TODO: REMOVE THE unnecessary description Option wrapping.
 
     /// Add or change description which by default should override that of the referenced component.
     /// Description supports markdown syntax. If referenced object type does not support
@@ -1355,18 +1446,24 @@ impl From<Array> for RefOr<Schema> {
     }
 }
 
-fn omit_decimal_zero<S>(maybe_value: &Option<f64>, s: S) -> Result<S::Ok, S::Error>
+fn omit_decimal_zero<S>(
+    maybe_value: &Option<crate::utoipa::Number>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {
-    if let Some(v) = maybe_value {
-        if v.fract() == 0.0 && *v >= i64::MIN as f64 && *v <= i64::MAX as f64 {
-            s.serialize_i64(v.trunc() as i64)
-        } else {
-            s.serialize_f64(*v)
+    match maybe_value {
+        Some(crate::utoipa::Number::Float(float)) => {
+            if float.fract() == 0.0 && *float >= i64::MIN as f64 && *float <= i64::MAX as f64 {
+                serializer.serialize_i64(float.trunc() as i64)
+            } else {
+                serializer.serialize_f64(*float)
+            }
         }
-    } else {
-        s.serialize_none()
+        Some(crate::utoipa::Number::Int(int)) => serializer.serialize_i64(*int as i64),
+        Some(crate::utoipa::Number::UInt(uint)) => serializer.serialize_u64(*uint as u64),
+        None => serializer.serialize_none(),
     }
 }
 
@@ -1433,7 +1530,7 @@ builder! {
 
         /// Optional extensions `x-something`.
         #[serde(skip_serializing_if = "Option::is_none", flatten)]
-        pub extensions: Option<HashMap<String, serde_json::Value>>,
+        pub extensions: Option<Extensions>,
     }
 }
 
@@ -1569,7 +1666,7 @@ impl ArrayBuilder {
     }
 
     /// Add openapi extensions (`x-something`) for [`Array`].
-    pub fn extensions(mut self, extensions: Option<HashMap<String, serde_json::Value>>) -> Self {
+    pub fn extensions(mut self, extensions: Option<Extensions>) -> Self {
         set_value!(self extensions extensions)
     }
 
@@ -1592,11 +1689,13 @@ impl From<ArrayBuilder> for RefOr<Schema> {
 
 impl ToArray for Array {}
 
+/// This convenience trait allows quick way to wrap any `RefOr<Schema>` with [`Array`] schema.
 pub trait ToArray
 where
     RefOr<Schema>: From<Self>,
     Self: Sized,
 {
+    /// Wrap this `RefOr<Schema>` with [`Array`].
     fn to_array(self) -> Array {
         Array::new(self)
     }
@@ -1614,7 +1713,7 @@ pub enum SchemaType {
     Type(Type),
     /// Multiple types rendered as [`slice`]
     Array(Vec<Type>),
-    /// Type that is considred typeless. _`AnyValue`_ will omit the type definition from the schema
+    /// Type that is considered typeless. _`AnyValue`_ will omit the type definition from the schema
     /// making it to accept any type possible.
     AnyValue,
 }
@@ -1640,7 +1739,7 @@ impl FromIterator<Type> for SchemaType {
 impl SchemaType {
     /// Instantiate new [`SchemaType`] of given [`Type`]
     ///
-    /// Method accpets one argument `type` to create [`SchemaType`] for.
+    /// Method accepts one argument `type` to create [`SchemaType`] for.
     ///
     /// # Examples
     ///
@@ -1672,7 +1771,7 @@ impl SchemaType {
 ///
 /// [`Type`] is used to create a [`SchemaType`] that defines the type of the [`Schema`].
 /// [`SchemaType`] can be created from a single [`Type`] or multiple [`Type`]s according to the
-/// OpenAPI 3.1 spec. Since the OpenAPI 3.1 is fully compatible with JSON schema the definiton of
+/// OpenAPI 3.1 spec. Since the OpenAPI 3.1 is fully compatible with JSON schema the definition of
 /// the _**type**_ property comes from [JSON Schema type](https://json-schema.org/understanding-json-schema/reference/type).
 ///
 /// # Examples
@@ -2528,11 +2627,10 @@ mod tests {
     #[test]
     fn object_with_extensions() {
         let expected = json!("value");
-        let json_value = ObjectBuilder::new()
-            .extensions(Some(
-                [("x-some-extension".to_string(), expected.clone())].into(),
-            ))
+        let extensions = extensions::ExtensionsBuilder::new()
+            .add("x-some-extension", expected.clone())
             .build();
+        let json_value = ObjectBuilder::new().extensions(Some(extensions)).build();
 
         let value = serde_json::to_value(&json_value).unwrap();
         assert_eq!(value.get("x-some-extension"), Some(&expected));
@@ -2541,11 +2639,10 @@ mod tests {
     #[test]
     fn array_with_extensions() {
         let expected = json!("value");
-        let json_value = ArrayBuilder::new()
-            .extensions(Some(
-                [("x-some-extension".to_string(), expected.clone())].into(),
-            ))
+        let extensions = extensions::ExtensionsBuilder::new()
+            .add("x-some-extension", expected.clone())
             .build();
+        let json_value = ArrayBuilder::new().extensions(Some(extensions)).build();
 
         let value = serde_json::to_value(&json_value).unwrap();
         assert_eq!(value.get("x-some-extension"), Some(&expected));
@@ -2554,11 +2651,10 @@ mod tests {
     #[test]
     fn oneof_with_extensions() {
         let expected = json!("value");
-        let json_value = OneOfBuilder::new()
-            .extensions(Some(
-                [("x-some-extension".to_string(), expected.clone())].into(),
-            ))
+        let extensions = extensions::ExtensionsBuilder::new()
+            .add("x-some-extension", expected.clone())
             .build();
+        let json_value = OneOfBuilder::new().extensions(Some(extensions)).build();
 
         let value = serde_json::to_value(&json_value).unwrap();
         assert_eq!(value.get("x-some-extension"), Some(&expected));
@@ -2567,11 +2663,10 @@ mod tests {
     #[test]
     fn allof_with_extensions() {
         let expected = json!("value");
-        let json_value = AllOfBuilder::new()
-            .extensions(Some(
-                [("x-some-extension".to_string(), expected.clone())].into(),
-            ))
+        let extensions = extensions::ExtensionsBuilder::new()
+            .add("x-some-extension", expected.clone())
             .build();
+        let json_value = AllOfBuilder::new().extensions(Some(extensions)).build();
 
         let value = serde_json::to_value(&json_value).unwrap();
         assert_eq!(value.get("x-some-extension"), Some(&expected));
@@ -2580,11 +2675,10 @@ mod tests {
     #[test]
     fn anyof_with_extensions() {
         let expected = json!("value");
-        let json_value = AnyOfBuilder::new()
-            .extensions(Some(
-                [("x-some-extension".to_string(), expected.clone())].into(),
-            ))
+        let extensions = extensions::ExtensionsBuilder::new()
+            .add("x-some-extension", expected.clone())
             .build();
+        let json_value = AnyOfBuilder::new().extensions(Some(extensions)).build();
 
         let value = serde_json::to_value(&json_value).unwrap();
         assert_eq!(value.get("x-some-extension"), Some(&expected));

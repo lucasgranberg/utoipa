@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use proc_macro2::TokenStream;
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::{
     parse::Parse, punctuated::Punctuated, spanned::Spanned, token::Comma, Attribute, Data, Field,
     Generics, Ident,
@@ -25,7 +25,7 @@ use crate::{
         FieldRename,
     },
     doc_comment::CommentAttributes,
-    Array, Diagnostics, GenericsExt, OptionExt, Required, ToTokensDiagnostics,
+    Array, Diagnostics, OptionExt, Required, ToTokensDiagnostics,
 };
 
 use super::{
@@ -34,7 +34,7 @@ use super::{
         Merge, ToTokensExt,
     },
     serde::{self, SerdeContainer, SerdeValue},
-    ComponentSchema, TypeTree,
+    ComponentSchema, Container, TypeTree,
 };
 
 impl_merge!(IntoParamsFeatures, FieldFeatures);
@@ -457,13 +457,13 @@ impl ToTokensDiagnostics for Param<'_> {
 
             let schema = ComponentSchema::new(component::ComponentSchemaProps {
                 type_tree: &component,
-                features: Some(schema_features),
+                features: schema_features,
                 description: None,
-                deprecated: None,
-                object_name: "",
-                is_generics_type_arg: self.generics.any_match_type_tree(&component),
+                container: &Container {
+                    generics: self.generics,
+                },
             })?;
-            let schema_tokens = crate::as_tokens_or_diagnostics!(&schema);
+            let schema_tokens = schema.to_token_stream();
 
             tokens.extend(quote! { .schema(Some(#schema_tokens)).build() });
         }

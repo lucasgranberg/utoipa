@@ -30,7 +30,7 @@ more details at [serve](https://docs.rs/utoipa-swagger-ui/latest/utoipa_swagger_
   hassle free.
 * **`debug-embed`** Enables `debug-embed` feature on `rust_embed` crate to allow embedding files in debug
   builds as well.
-* **`reqwest`** Use `reqwest` for downloading Swagger UI accoring to the `SWAGGER_UI_DOWNLOAD_URL` environment
+* **`reqwest`** Use `reqwest` for downloading Swagger UI according to the `SWAGGER_UI_DOWNLOAD_URL` environment
   variable. This is only enabled by default on _Windows_.
 * **`url`** Enabled by default for parsing and encoding the download URL.
 * **`vendored`** Enables vendored Swagger UI via `utoipa-swagger-ui-vendored` crate.
@@ -57,10 +57,9 @@ utoipa-swagger-ui = { version = "7", features = ["actix-web"] }
 
 > [!IMPORTANT]
 > _`utoipa-swagger-ui` crate will by default try to use system `curl` package for downloading the Swagger UI. It
-> can optionally be downloaded with `reqwest` by enabling `reqwest` feature. On Windows the `reqwest` feature
-> is enabled by default. Reqwest can be useful for platform independent builds however bringing quite a few 
-> unnecessary dependencies just to download a file. If the `SWAGGER_UI_DOWNLOAD_URL` is a file path then no 
-> downloading will happen._
+> can optionally be downloaded with `reqwest` by enabling `reqwest` feature. Reqwest can be useful for platform
+> independent builds however bringing quite a few unnecessary dependencies just to download a file.
+> If the `SWAGGER_UI_DOWNLOAD_URL` is a file path then no downloading will happen._
 
 > [!TIP]
 > Use **`vendored`** feature flag to use vendored Swagger UI. This is especially useful for no network 

@@ -7,6 +7,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use utoipa::openapi::RefOr;
 use utoipa::openapi::{Object, ObjectBuilder};
+use utoipa::Path;
 use utoipa::{
     openapi::{Response, ResponseBuilder, ResponsesBuilder},
     IntoParams, IntoResponses, OpenApi, ToSchema,
@@ -146,9 +147,10 @@ test_api_fn! {
     /// Additional info in long description
     ///
     /// With more info on separate lines
-    /// containing text.
-    ///
-    /// Yeah
+    /// containing markdown:
+    /// - A
+    ///   Indented.
+    /// - B
     #[deprecated]
 }
 
@@ -163,7 +165,7 @@ fn derive_path_with_all_info_success() {
     common::assert_json_array_len(operation.pointer("/parameters").unwrap(), 1);
     assert_value! {operation=>
        "deprecated" = r#"true"#, "Api fn deprecated status"
-       "description" = r#""Additional info in long description\n\nWith more info on separate lines\ncontaining text.\n\nYeah""#, "Api fn description"
+       "description" = r#""Additional info in long description\n\nWith more info on separate lines\ncontaining markdown:\n- A\n  Indented.\n- B""#, "Api fn description"
        "summary" = r#""This is test operation long multiline\nsummary. That need to be correctly split.""#, "Api fn summary"
        "operationId" = r#""foo_bar_id""#, "Api fn operation_id"
        "tags.[0]" = r#""custom_tag""#, "Api fn tag"
@@ -621,10 +623,13 @@ fn derive_path_params_map() {
             "name": "with_ref",
             "required": true,
             "schema": {
-              "additionalProperties": {
-                "$ref": "#/components/schemas/Foo"
-              },
-              "type": "object"
+                "propertyNames": {
+                    "type": "string"
+                },
+                "additionalProperties": {
+                    "$ref": "#/components/schemas/Foo"
+                },
+                  "type": "object"
             }
           },
           {
@@ -632,10 +637,13 @@ fn derive_path_params_map() {
             "name": "with_type",
             "required": true,
             "schema": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
+                "propertyNames": {
+                    "type": "string"
+                },
+                "additionalProperties": {
+                    "type": "string"
+                },
+                "type": "object"
             }
           }
         ]}
@@ -665,10 +673,13 @@ fn derive_path_params_with_examples() {
                 "key": "value"
             },
             "schema": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
+                "propertyNames": {
+                    "type": "string"
+                },
+                "additionalProperties": {
+                    "type": "string"
+                },
+                "type": "object"
             }
           },
           {
@@ -2218,7 +2229,7 @@ fn path_and_nest_with_default_tags_from_path() {
 }
 
 #[test]
-fn path_and_nest_with_addtional_tags() {
+fn path_and_nest_with_additional_tags() {
     mod test_path {
         #[allow(dead_code)]
         #[utoipa::path(get, path = "/test", tag = "this_is_tag", tags = ["additional"])]
@@ -2378,6 +2389,363 @@ fn derive_path_with_multiple_methods() {
                         },
                     },
                     "tags": []
+                }
+            }
+        })
+    );
+}
+
+#[test]
+fn derive_path_with_response_links() {
+    #![allow(dead_code)]
+
+    #[utoipa::path(
+        get,
+        path = "/test-links",
+        responses(
+            (status = 200, description = "success response", 
+                links(
+                    ("getFoo" = (
+                        operation_id = "test_links", 
+                        parameters(("key" = "value"), ("json_value" = json!(1))), 
+                        request_body = "this is body", 
+                        server(url = "http://localhost") 
+                    )),
+                    ("getBar" = (
+                        operation_ref = "this is ref"
+                    ))
+                )
+            )
+        ),
+    )]
+    #[allow(unused)]
+    async fn test_links() -> &'static str {
+        ""
+    }
+    use utoipa::OpenApi;
+    #[derive(OpenApi, Default)]
+    #[openapi(paths(test_links))]
+    struct ApiDoc;
+
+    let doc = &serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let paths = doc.pointer("/paths").expect("OpenApi must have paths");
+
+    assert_json_eq!(
+        &paths,
+        json!({
+            "/test-links": {
+                "get": {
+                    "operationId": "test_links",
+                    "responses": {
+                        "200": {
+                            "description": "success response",
+                            "links": {
+                                "getFoo": {
+                                    "operation_id": "test_links",
+                                    "parameters": {
+                                        "json_value": 1,
+                                        "key": "value"
+                                    },
+                                    "request_body": "this is body",
+                                    "server": {
+                                        "url": "http://localhost"
+                                    }
+                                },
+                                "getBar": {
+                                    "operation_ref": "this is ref"
+                                }
+                            },
+                        },
+                    },
+                    "tags": []
+                },
+            }
+        })
+    );
+}
+
+#[test]
+fn derive_path_test_collect_request_body() {
+    #![allow(dead_code)]
+
+    #[derive(ToSchema)]
+    struct Account {
+        id: i32,
+    }
+
+    #[derive(ToSchema)]
+    struct Person {
+        name: String,
+        account: Account,
+    }
+
+    #[utoipa::path(
+        post,
+        request_body = Person,
+        path = "/test-collect-schemas",
+        responses(
+            (status = 200, description = "success response")
+        ),
+    )]
+    async fn test_collect_schemas(_body: Person) -> &'static str {
+        ""
+    }
+
+    use utoipa::OpenApi;
+    #[derive(OpenApi)]
+    #[openapi(paths(test_collect_schemas))]
+    struct ApiDoc;
+
+    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let schemas = doc
+        .pointer("/components/schemas")
+        .expect("OpenApi must have schemas");
+
+    assert_json_eq!(
+        &schemas,
+        json!({
+            "Person": {
+                "properties": {
+                    "name": {
+                        "type": "string",
+                    },
+                    "account": {
+                        "$ref": "#/components/schemas/Account"
+                    }
+                },
+                "required": ["name", "account"],
+                "type": "object"
+            },
+            "Account": {
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format":  "int32",
+                    },
+                },
+                "required": ["id"],
+                "type": "object"
+            }
+        })
+    );
+}
+
+#[test]
+fn derive_path_test_collect_generic_array_request_body() {
+    #![allow(dead_code)]
+
+    #[derive(ToSchema)]
+    struct Account {
+        id: i32,
+    }
+
+    #[derive(ToSchema)]
+    struct Person {
+        name: String,
+        account: Account,
+    }
+
+    #[derive(ToSchema)]
+    struct CreateRequest<T> {
+        value: T,
+    }
+
+    #[utoipa::path(
+        post,
+        request_body = [ CreateRequest<Person> ],
+        path = "/test-collect-schemas",
+        responses(
+            (status = 200, description = "success response")
+        ),
+    )]
+    async fn test_collect_schemas(_body: Person) -> &'static str {
+        ""
+    }
+
+    use utoipa::OpenApi;
+    #[derive(OpenApi)]
+    #[openapi(paths(test_collect_schemas))]
+    struct ApiDoc;
+
+    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let schemas = doc
+        .pointer("/components/schemas")
+        .expect("OpenApi must have schemas");
+
+    assert_json_eq!(
+        &schemas,
+        json!({
+            "CreateRequest_Person": {
+                "properties": {
+                    "value": {
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                            },
+                            "account": {
+                                "$ref": "#/components/schemas/Account"
+                            }
+                        },
+                        "required": ["name", "account"],
+                        "type": "object"
+                    }
+                },
+                "required": ["value"],
+                "type": "object"
+            },
+            "Person": {
+                "properties": {
+                    "name": {
+                        "type": "string",
+                    },
+                    "account": {
+                        "$ref": "#/components/schemas/Account"
+                    }
+                },
+                "required": ["name", "account"],
+                "type": "object"
+            },
+            "Account": {
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format":  "int32",
+                    },
+                },
+                "required": ["id"],
+                "type": "object"
+            }
+        })
+    );
+}
+
+#[test]
+fn derive_path_test_collect_generic_request_body() {
+    #![allow(dead_code)]
+
+    #[derive(ToSchema)]
+    struct Account {
+        id: i32,
+    }
+
+    #[derive(ToSchema)]
+    struct Person {
+        name: String,
+        account: Account,
+    }
+
+    #[derive(ToSchema)]
+    struct CreateRequest<T> {
+        value: T,
+    }
+
+    #[utoipa::path(
+        post,
+        request_body = CreateRequest<Person>,
+        path = "/test-collect-schemas",
+        responses(
+            (status = 200, description = "success response")
+        ),
+    )]
+    async fn test_collect_schemas(_body: Person) -> &'static str {
+        ""
+    }
+
+    use utoipa::OpenApi;
+    #[derive(OpenApi)]
+    #[openapi(paths(test_collect_schemas))]
+    struct ApiDoc;
+
+    let doc = serde_json::to_value(ApiDoc::openapi()).unwrap();
+    let schemas = doc
+        .pointer("/components/schemas")
+        .expect("OpenApi must have schemas");
+
+    assert_json_eq!(
+        &schemas,
+        json!({
+            "CreateRequest_Person": {
+                "properties": {
+                    "value": {
+                        "properties": {
+                            "name": {
+                                "type": "string",
+                            },
+                            "account": {
+                                "$ref": "#/components/schemas/Account"
+                            }
+                        },
+                        "required": ["name", "account"],
+                        "type": "object"
+                    }
+                },
+                "required": ["value"],
+                "type": "object"
+            },
+            "Person": {
+                "properties": {
+                    "name": {
+                        "type": "string",
+                    },
+                    "account": {
+                        "$ref": "#/components/schemas/Account"
+                    }
+                },
+                "required": ["name", "account"],
+                "type": "object"
+            },
+            "Account": {
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "format":  "int32",
+                    },
+                },
+                "required": ["id"],
+                "type": "object"
+            }
+        })
+    );
+}
+
+#[test]
+fn path_derive_with_body_ref_using_as_attribute_schema() {
+    #![allow(unused)]
+
+    #[derive(Serialize, serde::Deserialize, Debug, Clone, ToSchema)]
+    #[schema(as = types::calculation::calculation_assembly_cost::v1::CalculationAssemblyCostResponse)]
+    pub struct CalculationAssemblyCostResponse {
+        #[schema(value_type = uuid::Uuid)]
+        pub id: String,
+    }
+
+    #[utoipa::path(
+        get,
+        path = "/calculations/assembly-costs",
+        responses(
+            (status = 200, description = "Get calculated cost of an assembly.",
+                body = CalculationAssemblyCostResponse)
+        ),
+    )]
+    async fn handler() {}
+
+    let operation = __path_handler::operation();
+    let operation = serde_json::to_value(&operation).expect("operation is JSON serializable");
+
+    assert_json_eq!(
+        operation,
+        json!({
+            "operationId": "handler",
+            "responses": {
+                "200": {
+                    "description": "Get calculated cost of an assembly.",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/types.calculation.calculation_assembly_cost.v1.CalculationAssemblyCostResponse"
+                            },
+                        }
+                    }
                 }
             }
         })

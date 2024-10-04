@@ -24,31 +24,22 @@
 //! _**Use [`OpenApiRouter`][router] to collect handlers with _`#[utoipa::path]`_ macro to compose service and form OpenAPI spec.**_
 //!
 //! ```rust
-//! # use utoipa::OpenApi;
+//! # use axum::Json;
+//! # use utoipa::openapi::OpenApi;
 //! # use utoipa_axum::{routes, PathItemExt, router::OpenApiRouter};
-//!  #[derive(utoipa::ToSchema)]
-//!  struct Todo {
+//!  #[derive(utoipa::ToSchema, serde::Serialize)]
+//!  struct User {
 //!      id: i32,
 //!  }
+//!
+//!  #[utoipa::path(get, path = "/user", responses((status = OK, body = User)))]
+//!  async fn get_user() -> Json<User> {
+//!     Json(User { id: 1 })
+//!  }
 //!  
-//!  #[derive(utoipa::OpenApi)]
-//!  #[openapi(components(schemas(Todo)))]
-//!  struct Api;
-//!  # #[utoipa::path(get, path = "/search")]
-//!  # async fn search_user() {}
-//!  # #[utoipa::path(get, path = "")]
-//!  # async fn get_user() {}
-//!  # #[utoipa::path(post, path = "")]
-//!  # async fn post_user() {}
-//!  # #[utoipa::path(delete, path = "")]
-//!  # async fn delete_user() {}
-//!  
-//!  let mut router: OpenApiRouter = OpenApiRouter::with_openapi(Api::openapi())
-//!      .routes(routes!(search_user))
-//!      .routes(routes!(get_user, post_user, delete_user));
-//!  
-//!  let api = router.to_openapi();
-//!  let axum_router: axum::Router = router.into();
+//!  let (router, api): (axum::Router, OpenApi) = OpenApiRouter::new()
+//!      .routes(routes!(get_user))
+//!      .split_for_parts();
 //! ```
 //!
 //! [router]: router/struct.OpenApiRouter.html
@@ -61,7 +52,7 @@ use utoipa::openapi::HttpMethod;
 /// Extends [`utoipa::openapi::path::PathItem`] by providing conversion methods to convert this
 /// path item type to a [`axum::routing::MethodFilter`].
 pub trait PathItemExt {
-    /// Convert this path item type ot a [`axum::routing::MethodFilter`].
+    /// Convert this path item type to a [`axum::routing::MethodFilter`].
     ///
     /// Method filter is used with handler registration on [`axum::routing::MethodRouter`].
     fn to_method_filter(&self) -> MethodFilter;
@@ -89,7 +80,7 @@ pub use paste::paste;
 /// Collect axum handlers annotated with [`utoipa::path`] to [`router::UtoipaMethodRouter`].
 ///
 /// [`routes`] macro will return [`router::UtoipaMethodRouter`] which contains an
-/// [`axum::routing::MethodRouter`] and currenty registered paths. The output of this macro is
+/// [`axum::routing::MethodRouter`] and currently registered paths. The output of this macro is
 /// meant to be used together with [`router::OpenApiRouter`] which combines the paths and axum
 /// routers to a single entity.
 ///
@@ -136,37 +127,35 @@ macro_rules! routes {
         {
             use $crate::PathItemExt;
             let mut paths = utoipa::openapi::path::Paths::new();
-            let (path, item, types) = routes!(@resolve_types $handler);
+            let mut schemas = Vec::<(String, utoipa::openapi::RefOr<utoipa::openapi::schema::Schema>)>::new();
+            let (path, item, types) = routes!(@resolve_types $handler : schemas);
             #[allow(unused_mut)]
             let mut method_router = types.iter().by_ref().fold(axum::routing::MethodRouter::new(), |router, path_type| {
                 router.on(path_type.to_method_filter(), $handler)
             });
-            for method_type in types {
-                paths.add_path(&path, utoipa::openapi::path::PathItem::new(method_type, item.clone()));
-            }
-            $( method_router = routes!( method_router: paths: $tail ); )*
-            (paths, method_router)
+            paths.add_path_operation(&path, types, item);
+            $( method_router = routes!( schemas: method_router: paths: $tail ); )*
+            (schemas, paths, method_router)
         }
     };
-    ( $router:ident: $paths:ident: $handler:path $(, $tail:tt)* ) => {
+    ( $schemas:tt: $router:ident: $paths:ident: $handler:path $(, $tail:tt)* ) => {
         {
-            let (path, item, types) = routes!(@resolve_types $handler);
+            let (path, item, types) = routes!(@resolve_types $handler : $schemas);
             let router = types.iter().by_ref().fold($router, |router, path_type| {
                 router.on(path_type.to_method_filter(), $handler)
             });
-            for method_type in types {
-                $paths.add_path(&path, utoipa::openapi::path::PathItem::new(method_type, item.clone()));
-            }
+            $paths.add_path_operation(&path, types, item);
             router
         }
     };
-    ( @resolve_types $handler:path ) => {
+    ( @resolve_types $handler:path : $schemas:tt ) => {
         {
             $crate::paste! {
-                let path = routes!( @path path of $handler );
-                let mut operation = routes!( @path operation of $handler );
-                let types = routes!( @path methods of $handler );
-                let tags = routes!( @path tags of $handler );
+                let path = routes!( @path [path()] of $handler );
+                let mut operation = routes!( @path [operation()] of $handler );
+                let types = routes!( @path [methods()] of $handler );
+                let tags = routes!( @path [tags()] of $handler );
+                routes!( @path [schemas(&mut $schemas)] of $handler );
                 if !tags.is_empty() {
                     let operation_tags = operation.tags.get_or_insert(Vec::new());
                     operation_tags.extend(tags.iter().map(ToString::to_string));
@@ -175,27 +164,27 @@ macro_rules! routes {
             }
         }
     };
-    ( @path $op:ident of $part:ident $( :: $tt:tt )* ) => {
-        routes!( $op [ $part $( $tt )*] )
+    ( @path $op:tt of $part:ident $( :: $tt:tt )* ) => {
+        routes!( $op : [ $part $( $tt )*] )
     };
-    ( $op:ident [ $first:tt $( $rest:tt )* ] $( $rev:tt )* ) => {
-        routes!( $op [ $( $rest )* ] $first $( $rev)* )
+    ( $op:tt : [ $first:tt $( $rest:tt )* ] $( $rev:tt )* ) => {
+        routes!( $op : [ $( $rest )* ] $first $( $rev)* )
     };
-    ( $op:ident [] $first:tt $( $rest:tt )* ) => {
-        routes!( @inverse $op $first $( $rest )* )
+    ( $op:tt : [] $first:tt $( $rest:tt )* ) => {
+        routes!( @inverse $op : $first $( $rest )* )
     };
-    ( @inverse $op:ident $tt:tt $( $rest:tt )* ) => {
-        routes!( @rev $op $tt [$($rest)*] )
+    ( @inverse $op:tt : $tt:tt $( $rest:tt )* ) => {
+        routes!( @rev $op : $tt [$($rest)*] )
     };
-    ( @rev $op:ident $tt:tt [ $first:tt $( $rest:tt)* ] $( $reversed:tt )* ) => {
-        routes!( @rev $op $tt [ $( $rest )* ] $first $( $reversed )* )
+    ( @rev $op:tt : $tt:tt [ $first:tt $( $rest:tt)* ] $( $reversed:tt )* ) => {
+        routes!( @rev $op : $tt [ $( $rest )* ] $first $( $reversed )* )
     };
-    ( @rev $op:ident $handler:tt [] $($tt:tt)* ) => {
+    ( @rev [$op:ident $( $args:tt )* ] : $handler:tt [] $($tt:tt)* ) => {
         {
             #[allow(unused_imports)]
-            use utoipa::{Path, __dev::Tags};
+            use utoipa::{Path, __dev::{Tags, SchemaReferences}};
             $crate::paste! {
-                $( $tt :: )* [<__path_ $handler>]::$op()
+                $( $tt :: )* [<__path_ $handler>]::$op $( $args )*
             }
         }
     };
@@ -204,9 +193,13 @@ macro_rules! routes {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
     use axum::extract::State;
     use router::*;
+    use utoipa::openapi::{Content, Ref, ResponseBuilder};
+    use utoipa::PartialSchema;
 
     #[utoipa::path(get, path = "/")]
     async fn root() {}
@@ -338,6 +331,50 @@ mod tests {
         assert_eq!(expected_paths.build(), paths);
     }
 
+    #[test]
+    fn openapi_with_auto_collected_schemas() {
+        #[derive(utoipa::ToSchema)]
+        #[allow(unused)]
+        struct Todo {
+            id: i32,
+        }
+
+        #[utoipa::path(get, path = "/todo", responses((status = 200, body = Todo)))]
+        async fn get_todo() {}
+
+        let mut router: router::OpenApiRouter =
+            router::OpenApiRouter::new().routes(routes!(get_todo));
+
+        let openapi = router.to_openapi();
+        let paths = openapi.paths;
+        let schemas = openapi
+            .components
+            .expect("Router must have auto collected schemas")
+            .schemas;
+
+        let expected_paths = utoipa::openapi::path::PathsBuilder::new().path(
+            "/todo",
+            utoipa::openapi::PathItem::new(
+                utoipa::openapi::path::HttpMethod::Get,
+                utoipa::openapi::path::OperationBuilder::new()
+                    .operation_id(Some("get_todo"))
+                    .response(
+                        "200",
+                        ResponseBuilder::new().content(
+                            "application/json",
+                            Content::builder()
+                                .schema(Some(Ref::from_schema_name("Todo")))
+                                .build(),
+                        ),
+                    ),
+            ),
+        );
+        let expected_schemas =
+            BTreeMap::from_iter(std::iter::once(("Todo".to_string(), Todo::schema())));
+        assert_eq!(expected_paths.build(), paths);
+        assert_eq!(expected_schemas, schemas);
+    }
+
     mod pets {
 
         #[utoipa::path(get, path = "/")]
@@ -349,6 +386,7 @@ mod tests {
         #[utoipa::path(delete, path = "/")]
         pub async fn delete_pet() {}
     }
+
     #[test]
     fn openapi_routes_from_another_path() {
         let mut router: OpenApiRouter =

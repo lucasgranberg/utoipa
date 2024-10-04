@@ -879,7 +879,6 @@ fn path_with_all_args() {
     assert_json_eq!(
         &operation.pointer("/requestBody"),
         json!({
-            "description": "",
             "content": {
                 "application/json": {
                     "schema": {
@@ -940,7 +939,6 @@ fn path_with_all_args_using_uuid() {
     assert_json_eq!(
         &operation.pointer("/requestBody"),
         json!({
-            "description": "",
             "content": {
                 "application/json": {
                     "schema": {
@@ -1019,7 +1017,6 @@ fn path_with_all_args_using_custom_uuid() {
     assert_json_eq!(
         &operation.pointer("/requestBody"),
         json!({
-            "description": "",
             "content": {
                 "application/json": {
                     "schema": {
@@ -1070,7 +1067,7 @@ macro_rules! test_derive_path_operations {
 
 #[test]
 fn path_derive_custom_generic_wrapper() {
-    #[derive(utoipa::ToSchema, serde::Serialize, serde::Deserialize)]
+    #[derive(serde::Serialize, serde::Deserialize)]
     struct Validated<T>(T);
 
     impl<T> FromRequest for Validated<T> {
@@ -1100,12 +1097,20 @@ fn path_derive_custom_generic_wrapper() {
     struct Doc;
 
     let doc = serde_json::to_value(Doc::openapi()).unwrap();
+    let schemas = doc.pointer("/components/schemas").unwrap();
     let operation = doc.pointer("/paths/~1item/post").unwrap();
 
     assert_json_eq!(
+        &schemas,
+        json!({
+            "Item": {
+                "type": "string"
+            }
+        })
+    );
+    assert_json_eq!(
         &operation.pointer("/requestBody"),
         json!({
-            "description": "",
             "content": {
                 "application/json": {
                     "schema": {
